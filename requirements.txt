@@ -7,3 +7,4 @@ requests>=2.31,<3.0
 matplotlib
 reportlab
 bcrypt==4.2.0
+python-dotenv

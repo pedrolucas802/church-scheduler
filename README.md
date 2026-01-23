@@ -1,4 +1,3 @@
-@Tech_maraponga_2026
 
 # 📺 Church Streaming Scheduler
 
