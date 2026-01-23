@@ -2,12 +2,11 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: ["master"]
+    branches: [ "master" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -19,25 +18,30 @@ jobs:
           script: |
             set -e
 
-            cd ${{ secrets.VPS_APP_DIR }}
+            APP_DIR="${{ secrets.VPS_APP_DIR }}"
 
-            # ensure github host key is known (avoids Host key verification failed)
-            mkdir -p /home/app/.ssh
-            chmod 700 /home/app/.ssh
-            ssh-keyscan -H github.com >> /home/app/.ssh/known_hosts
-            chmod 644 /home/app/.ssh/known_hosts
-            chown -R app:app /home/app/.ssh
+            echo "-> Moving to app dir"
+            cd "$APP_DIR"
 
-            # avoid "dubious ownership"
-            sudo -u app git config --global --add safe.directory ${{ secrets.VPS_APP_DIR }}
+            echo "-> Ensure GitHub host key is known"
+            sudo -u app mkdir -p /home/app/.ssh
+            sudo -u app chmod 700 /home/app/.ssh
+            sudo -u app ssh-keyscan -H github.com >> /home/app/.ssh/known_hosts
+            sudo -u app chmod 644 /home/app/.ssh/known_hosts
 
-            # pull latest as app (app has the GitHub repo key)
+            echo "-> Mark repo as safe (only once)"
+            sudo -u app git config --global --get-all safe.directory | grep -qx "$APP_DIR" || \
+              sudo -u app git config --global --add safe.directory "$APP_DIR"
+
+            echo "-> Pulling latest code as app"
             sudo -u app git fetch --all
             sudo -u app git reset --hard origin/master
 
-            # install deps as app
-            sudo -u app ${{ secrets.VPS_APP_DIR }}/.venv/bin/pip install -r ${{ secrets.VPS_APP_DIR }}/requirements.txt
+            echo "-> Installing deps as app"
+            sudo -u app "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
-            # restart service (needs sudo)
+            echo "-> Restarting service"
             sudo -n /usr/bin/systemctl restart church-scheduler
+
+            echo "-> Service status"
             sudo -n /usr/bin/systemctl status church-scheduler --no-pager
