@@ -2,13 +2,11 @@ name: Deploy to VPS
 
 on:
   push:
-    branches:
-      - master
+    branches: ["master"]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -17,24 +15,22 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          timeout: 30s
-          command_timeout: 10m
           script: |
             set -e
 
-            echo "->️ Moving to app directory"
-            cd /home/app/apps/church-scheduler
+            echo "-> Moving to app dir"
+            cd ${{ secrets.VPS_APP_DIR }}
 
-            echo "->️ Fetching latest code"
+            echo "-> Pulling latest"
             git fetch --all
             git reset --hard origin/master
 
-            echo "-> Installing dependencies"
-            /home/app/apps/church-scheduler/.venv/bin/pip install --upgrade pip
-            /home/app/apps/church-scheduler/.venv/bin/pip install -r requirements.txt
+            echo "-> Installing deps"
+            ./.venv/bin/pip install --upgrade pip
+            ./.venv/bin/pip install -r requirements.txt
 
             echo "-> Restarting service"
-            sudo systemctl restart church-scheduler
+            sudo /bin/systemctl restart church-scheduler
 
-            echo "-> Service status"
-            sudo systemctl status church-scheduler --no-pager
+            echo "-> Status"
+            sudo /bin/systemctl status church-scheduler --no-pager
