@@ -6,7 +6,7 @@ from src.i18n import t
 
 load_dotenv()
 
-st.set_page_config(page_title="Church Scheduler MVP", layout="wide")
+st.set_page_config(page_title="Church Scheduler", layout="wide")
 init_db()
 
 st.markdown(
