@@ -2,7 +2,7 @@ import streamlit as st
 
 TRANSLATIONS = {
     "pt": {
-        "app.title": "Escala do Ministério — MVP",
+        "app.title": "Escala CN Maraponga",
         "app.caption": "MVP local: voluntários, geração de escala, edição, trocas e fila de lembretes.",
         "nav.admin_access": "Acesso de Admin",
         "common.admin_required": "Acesso de admin necessário.",
