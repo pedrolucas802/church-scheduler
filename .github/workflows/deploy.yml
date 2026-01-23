@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -18,19 +19,25 @@ jobs:
           script: |
             set -e
 
-            echo "-> Moving to app dir"
             cd ${{ secrets.VPS_APP_DIR }}
 
-            echo "-> Pulling latest"
-            git fetch --all
-            git reset --hard origin/master
+            # ensure github host key is known (avoids Host key verification failed)
+            mkdir -p /home/app/.ssh
+            chmod 700 /home/app/.ssh
+            ssh-keyscan -H github.com >> /home/app/.ssh/known_hosts
+            chmod 644 /home/app/.ssh/known_hosts
+            chown -R app:app /home/app/.ssh
 
-            echo "-> Installing deps"
-            ./.venv/bin/pip install --upgrade pip
-            ./.venv/bin/pip install -r requirements.txt
+            # avoid "dubious ownership"
+            sudo -u app git config --global --add safe.directory ${{ secrets.VPS_APP_DIR }}
 
-            echo "-> Restarting service"
-            /bin/systemctl restart church-scheduler
+            # pull latest as app (app has the GitHub repo key)
+            sudo -u app git fetch --all
+            sudo -u app git reset --hard origin/master
 
-            echo "-> Status"
-            /bin/systemctl status church-scheduler --no-pager
+            # install deps as app
+            sudo -u app ${{ secrets.VPS_APP_DIR }}/.venv/bin/pip install -r ${{ secrets.VPS_APP_DIR }}/requirements.txt
+
+            # restart service (needs sudo)
+            sudo -n /usr/bin/systemctl restart church-scheduler
+            sudo -n /usr/bin/systemctl status church-scheduler --no-pager
