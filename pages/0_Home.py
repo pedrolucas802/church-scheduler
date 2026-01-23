@@ -57,7 +57,7 @@ st.write("")  # spacing
 # ----------------------------
 # Quick actions (Schedule + Swap Request)
 # ----------------------------
-st.subheader("🚀 " + (t("home.quick_actions") if "home.quick_actions" else ("Ações rápidas" if st.session_state.get("lang","pt")=="pt" else "Quick actions")))
+# st.subheader("🚀 " + (t("home.quick_actions") if "home.quick_actions" else ("Ações rápidas" if st.session_state.get("lang","pt")=="pt" else "Quick actions")))
 
 c1, c2 = st.columns(2, gap="large")
 

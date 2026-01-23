@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import streamlit as st
 from dotenv import load_dotenv
-load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 from src.db import init_db
 from src.auth import admin_gate, is_admin
