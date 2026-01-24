@@ -1,2 +1,7 @@
 # Project exclude paths
 /.venv/
+
+.env
+**/.env
+
+church-scheduler.iml
