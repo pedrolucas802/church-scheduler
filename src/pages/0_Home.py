@@ -79,7 +79,7 @@ with c1:
     ):
         # Adjust the filename to match your schedule page
         # Example: pages/3_Schedule.py
-        st.switch_page("pages/2_Schedule.py")
+        st.switch_page("src/pages/2_Schedule.py")
 
 with c2:
     st.markdown(
@@ -99,7 +99,7 @@ with c2:
     ):
         # If you want a dedicated swap page, point here.
         # If swap requests live inside Edit page, point to it:
-        st.switch_page("pages/4_Edit.py")
+        st.switch_page("src/pages/4_Edit.py")
 
 st.write("")
 
