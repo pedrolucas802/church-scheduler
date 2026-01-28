@@ -3,19 +3,22 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime
 from typing import Optional
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, MetaData, Table, Column,
-    Integer, String, insert, update, select
+    Integer, String, insert, update
 )
 from sqlalchemy.exc import IntegrityError
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 VOLUNTEERS_TEXT = r"""
-PEDRO LUCAS - 85998193804
-JUVENIR - +55 85 98541-9496
+Pedro Lucas - 85998193804
+Juvenir - +55 85 98541-9496
 Berg - +55 85 99146-3735
 Dan Costa - +55 85 98639-1469
 Dudu - +55 85 98869-2058
@@ -41,7 +44,9 @@ Nagila - ‪+55 85 99660-5707‬
 Renan castro - ‪+55 85 99751-5457‬
 Tiago Silveira - +55 85 99793-1305
 Davi - +55 85 99418-5302
+Gabriel Feijó - +55 85 99937-2284
 """.strip()
+
 
 DEFAULTS = dict(
     active=1,
@@ -52,19 +57,31 @@ DEFAULTS = dict(
     can_mobile=1,
 )
 
+
 def normalize_phone(raw: str) -> Optional[str]:
     if not raw:
         return None
-    raw = raw.replace("\u202a", "").replace("\u202c", "").replace("\u200e", "").replace("\u200f", "")
-    raw = raw.replace("‪", "").replace("‬", "")
+
+    raw = (
+        raw.replace("\u202a", "")
+        .replace("\u202c", "")
+        .replace("\u200e", "")
+        .replace("\u200f", "")
+        .replace("‪", "")
+        .replace("‬", "")
+    )
+
     digits = re.sub(r"\D+", "", raw)
     if not digits:
         return None
+
     if digits.startswith("55") and len(digits) >= 12:
         return "+" + digits
     if len(digits) in (10, 11):
         return "+55" + digits
+
     return digits
+
 
 def parse_lines(text: str):
     out = []
@@ -72,30 +89,39 @@ def parse_lines(text: str):
         line = line.strip()
         if not line:
             continue
+
         cleaned = line.replace("—", "-").replace("–", "-")
+
         if "-" in cleaned:
             name, phone = cleaned.split("-", 1)
             name = name.strip()
             phone = phone.strip()
         else:
             name, phone = cleaned.strip(), ""
+
         if name:
             out.append((name, normalize_phone(phone) if phone else None))
+
     return out
+
 
 def main():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise SystemExit("DATABASE_URL not set.")
 
+    if not db_url.startswith("postgresql"):
+        raise SystemExit("DATABASE_URL must be PostgreSQL.")
+
     engine = create_engine(db_url, future=True)
     metadata = MetaData()
 
-    # Define ONLY the volunteers table (minimal) and create if missing
+    # Volunteers table (matches your real schema)
     volunteers = Table(
         "volunteers", metadata,
         Column("id", Integer, primary_key=True),
         Column("name", String, nullable=False, unique=True),
+        Column("email", String, nullable=True),   # <-- important
         Column("phone", String, nullable=True),
         Column("active", Integer, nullable=False, default=1),
         Column("thu_ok", Integer, nullable=False, default=1),
@@ -105,6 +131,7 @@ def main():
         Column("can_mobile", Integer, nullable=False, default=1),
     )
 
+    # Create table if missing
     metadata.create_all(engine)
 
     items = parse_lines(VOLUNTEERS_TEXT)
@@ -112,7 +139,13 @@ def main():
 
     with engine.begin() as conn:
         for name, phone in items:
-            data = {"name": name, "phone": phone, **DEFAULTS}
+            data = {
+                "name": name,
+                "email": None,   # 👈 explicitly NULL email
+                "phone": phone,
+                **DEFAULTS,
+            }
+
             try:
                 conn.execute(insert(volunteers).values(**data))
                 inserted += 1
@@ -120,11 +153,21 @@ def main():
                 conn.execute(
                     update(volunteers)
                     .where(volunteers.c.name == name)
-                    .values(phone=phone, **DEFAULTS)
+                    .values(
+                        email=None,
+                        phone=phone,
+                        **DEFAULTS,
+                    )
                 )
                 updated += 1
 
-    print(f"Done. Inserted: {inserted}, Updated: {updated}, Total: {len(items)}")
+    print(
+        f"Done.\n"
+        f"Inserted: {inserted}\n"
+        f"Updated: {updated}\n"
+        f"Total processed: {len(items)}"
+    )
+
 
 if __name__ == "__main__":
     main()

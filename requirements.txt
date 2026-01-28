@@ -8,3 +8,5 @@ matplotlib
 reportlab
 bcrypt==4.2.0
 python-dotenv
+requests
+apscheduler
