@@ -1,36 +1,46 @@
-import argparse
-import getpass
-import re
+import os
+import sys
+from pathlib import Path
+from getpass import getpass
+from bcrypt import hashpw, gensalt
+from dotenv import load_dotenv
 
-import bcrypt
+# -----------------------------
+# Ensure project root on path
+# -----------------------------
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT))
 
+# -----------------------------
+# Load .env explicitly
+# -----------------------------
+ENV_PATH = ROOT / ".env"
+load_dotenv(ENV_PATH)
+
+# -----------------------------
+# Now imports are safe
+# -----------------------------
 from src.db import init_db, upsert_admin_user
-
-USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{3,32}$")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create/update an admin user password.")
-    parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
-    args = parser.parse_args()
-
     init_db()
 
-    username = (args.username or "admin").strip()
-    if not USERNAME_RE.match(username):
-        raise SystemExit("Invalid username. Use 3-32 chars: letters, numbers, . _ -")
+    username = input("Admin username: ").strip()
+    password = getpass("Admin password: ").strip()
 
-    pwd1 = getpass.getpass(f"New password for '{username}': ")
-    pwd2 = getpass.getpass("Confirm password: ")
-    if pwd1 != pwd2:
-        raise SystemExit("Passwords do not match.")
-    if len(pwd1) < 4:
-        raise SystemExit("Use at least 4 characters (recommend 16+).")
+    if not username or not password:
+        raise SystemExit("Username and password are required")
 
-    hashed = bcrypt.hashpw(pwd1.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    upsert_admin_user(username, hashed, active=True)
+    password_hash = hashpw(password.encode(), gensalt()).decode()
 
-    print(f"✅ Admin password set/updated for user '{username}'.")
+    admin_id = upsert_admin_user(
+        username=username,
+        password_hash=password_hash,
+        active=True
+    )
+
+    print(f"✅ Admin '{username}' ready (id={admin_id})")
 
 
 if __name__ == "__main__":
