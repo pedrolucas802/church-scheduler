@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: church_db
+    environment:
+      POSTGRES_DB: church
+      POSTGRES_USER: church
+      POSTGRES_PASSWORD: church
+    ports:
+      - "5432:5432"
+    volumes:
+      - church_db_data:/var/lib/postgresql/data
+
+volumes:
+  church_db_data:

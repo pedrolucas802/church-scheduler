@@ -1,5 +1,26 @@
 import streamlit as st
 
+def get_lang() -> str:
+    return st.session_state.get("lang", "pt")
+
+def t(key: str) -> str:
+    lang = get_lang()
+    return TRANSLATIONS.get(lang, {}).get(key, key)
+
+def language_selector():
+    if "lang" not in st.session_state:
+        st.session_state.lang = "pt"
+
+    choice = st.sidebar.radio(
+        t("lang.label"),
+        options=[t("lang.pt"), t("lang.en")],
+        index=0 if st.session_state.lang == "pt" else 1,
+        key="lang_choice",
+    )
+
+    st.session_state.lang = "pt" if choice == t("lang.pt") else "en"
+    return st.session_state.lang
+
 TRANSLATIONS = {
     "pt": {
         "app.title": "Escala CN Maraponga",
@@ -8,13 +29,15 @@ TRANSLATIONS = {
         "common.admin_required": "Acesso de admin necessário.",
         "common.save": "Salvar",
         "common.refresh": "Atualize a página para ver as mudanças.",
-        "lang.label": "Idioma",
-        "lang.pt": "Português (BR)",
-        "lang.en": "English",
+
+        "lang.label": "Idioma:",
+        "lang.pt": "🇧🇷 PT",
+        "lang.en": "🇺🇸 EN",
 
         "vol.title": "👥 Voluntários",
         "vol.add_update": "Adicionar / Atualizar voluntário (pelo nome)",
         "vol.name": "Nome",
+        "vol.email": "Email",
         "vol.phone": "Telefone (opcional, futuro WhatsApp)",
         "vol.active": "Ativo",
         "vol.thu": "Disponível às Quintas",
@@ -25,6 +48,28 @@ TRANSLATIONS = {
         "vol.quick_toggle": "Ativar/Desativar rápido",
         "vol.volunteer_id": "ID do voluntário",
         "vol.set_active_to": "Definir ativo como",
+
+        # Volunteers page - public/non-admin
+        "vol.public.join_title": " Entrar como voluntário",
+        "vol.public.join_caption": "Preencha seus dados para que a equipe possa te colocar na escala.",
+        "vol.public.submit": "Enviar",
+        "vol.public.submitted_ok": "✅ Cadastro enviado! Aguarde um admin aprovar/ajustar.",
+        "vol.public.list_title": "👥 Voluntários (lista pública)",
+        "vol.public.list_caption": "A lista abaixo não mostra telefone nem email.",
+
+        "vol.admin.section": "🛠️ Admin — Voluntários",
+        "vol.admin.caption": "Admin vê e edita tudo (inclui email/telefone).",
+        "vol.bulk.title": "Importar em massa / Bulk import",
+        "vol.bulk.caption": "Cole a lista no formato 'NOME - TELEFONE' (uma linha por pessoa).",
+        "vol.bulk.list_label": "Lista / List",
+        "vol.bulk.import_btn": "Importar / Import",
+        "vol.bulk.nothing": "Nada para importar / Nothing to import.",
+        "vol.bulk.done_pt": "Importados/atualizados",
+        "vol.bulk.done_en": "Imported/updated",
+        "vol.note.upsert_key": "Nota: hoje o upsert usa `name` como chave única. Mais tarde, podemos migrar para `email` como chave.",
+
+        "common.name_required": "Nome é obrigatório / Name is required.",
+        "common.invalid_email": "Email inválido / Invalid email.",
 
         "sched.title": "📅 Escala",
         "sched.start": "Data inicial",
@@ -84,6 +129,7 @@ TRANSLATIONS = {
         "nav.generate": "Gerar escala",
         "nav.reminders": "Lembretes",
     },
+
     "en": {
         "app.title": "Church Streaming Scheduler — MVP",
         "app.caption": "Local MVP: volunteers, schedule generation, editing, swaps, and reminders queue.",
@@ -91,13 +137,15 @@ TRANSLATIONS = {
         "common.admin_required": "Admin required.",
         "common.save": "Save",
         "common.refresh": "Refresh the page to see changes.",
-        "lang.label": "Language",
-        "lang.pt": "Português (BR)",
-        "lang.en": "English",
+
+        "lang.label": "Language: ",
+        "lang.pt": "🇧🇷 PT",
+        "lang.en": "🇺🇸 EN",
 
         "vol.title": "👥 Volunteers",
         "vol.add_update": "Add / Update volunteer (by name)",
         "vol.name": "Name",
+        "vol.email": "Email",
         "vol.phone": "Phone (optional, future WhatsApp)",
         "vol.active": "Active",
         "vol.thu": "Available Thursdays",
@@ -108,6 +156,28 @@ TRANSLATIONS = {
         "vol.quick_toggle": "Quick activate/deactivate",
         "vol.volunteer_id": "Volunteer ID",
         "vol.set_active_to": "Set active to",
+
+        # Volunteers page - public/non-admin
+        "vol.public.join_title": " Join as a volunteer",
+        "vol.public.join_caption": "Fill your info so the team can schedule you.",
+        "vol.public.submit": "Submit",
+        "vol.public.submitted_ok": "✅ Submitted! An admin will review/adjust it.",
+        "vol.public.list_title": "👥 Volunteers (public list)",
+        "vol.public.list_caption": "This list does not show phone or email.",
+
+        "vol.admin.section": "🛠️ Admin — Volunteers",
+        "vol.admin.caption": "Admin can view/edit everything (includes email/phone).",
+        "vol.bulk.title": "Bulk import",
+        "vol.bulk.caption": "Paste the list as 'NAME - PHONE' (one per line).",
+        "vol.bulk.list_label": "List",
+        "vol.bulk.import_btn": "Import",
+        "vol.bulk.nothing": "Nothing to import.",
+        "vol.bulk.done_pt": "Imported/updated",
+        "vol.bulk.done_en": "Imported/updated",
+        "vol.note.upsert_key": "Note: today upsert uses `name` as the unique key. Later we can migrate to `email` as the key.",
+
+        "common.name_required": "Name is required.",
+        "common.invalid_email": "Invalid email.",
 
         "sched.title": "📅 Schedule",
         "sched.start": "Start date",
@@ -168,23 +238,3 @@ TRANSLATIONS = {
         "nav.reminders": "Reminders",
     },
 }
-
-def get_lang() -> str:
-    return st.session_state.get("lang", "pt")
-
-def t(key: str) -> str:
-    lang = get_lang()
-    return TRANSLATIONS.get(lang, {}).get(key, key)
-
-def language_selector():
-    # Create the widget once per run (no persistent guard)
-    # Use a stable label so it doesn't "shift" when the language changes
-    st.sidebar.markdown("### Language / Idioma")
-
-    # Keep the selected value directly in session_state["lang"]
-    st.sidebar.radio(
-        label="",
-        options=["pt", "en"],
-        key="lang",  # <-- single source of truth
-        format_func=lambda x: TRANSLATIONS["pt"]["lang.pt"] if x == "pt" else TRANSLATIONS["en"]["lang.en"],
-    )

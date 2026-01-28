@@ -1,7 +1,8 @@
-import streamlit as st
-from datetime import datetime
-from collections import Counter, defaultdict
 import random
+from collections import Counter, defaultdict
+from datetime import datetime
+
+import streamlit as st
 
 from src.auth import is_admin
 from src.db import (
@@ -12,26 +13,35 @@ from src.db import (
     rebuild_reminders_for_month,
 )
 from src.scheduler import month_services, generate_assignments
+from src.i18n import t, get_lang
 
-try:
-    from src.i18n import t
-except Exception:
-    def t(key: str) -> str:
-        return key
+
+lang = get_lang()
 
 
 def _label(pt: str, en: str) -> str:
-    lang = st.session_state.get("lang", "en")
     return pt if lang == "pt" else en
 
 
-st.title(_label("⚙️ Gerar Escala", "⚙️ Generate Schedule"))
+def is_sunday_1500_obs_only(dt_iso: str) -> bool:
+    """
+    Rule: Sunday 15:00 service needs OBS only (no FIXED/MOBILE).
+    """
+    dt = datetime.fromisoformat(dt_iso)
+    return (dt.weekday() == 6) and (dt.strftime("%H:%M") == "15:00")
+
+
+def required_roles_for_service(dt_iso: str) -> list[str]:
+    return ["OBS"] if is_sunday_1500_obs_only(dt_iso) else ["OBS", "FIXED", "MOBILE"]
+
+
+st.title(t("gen.title") if t("gen.title") != "gen.title" else _label("⚙️ Gerar Escala", "⚙️ Generate Schedule"))
 
 if not is_admin():
-    st.warning(_label("Acesso de admin necessário.", "Admin required."))
+    st.warning(t("common.admin_required") if t("common.admin_required") != "common.admin_required" else _label("Acesso de admin necessário.", "Admin required."))
     st.stop()
 
-
+# Seed
 if "gen_seed" not in st.session_state:
     st.session_state["gen_seed"] = random.randint(1, 1_000_000_000)
 
@@ -46,13 +56,13 @@ with seed_bar1:
 with seed_bar2:
     if st.button("🎲 " + _label("Novo seed", "New seed"), key="gen_new_seed_btn"):
         st.session_state["gen_seed"] = random.randint(1, 1_000_000_000)
+        st.toast(_label("Seed atualizado.", "Seed updated."), icon="🎲")
         st.rerun()
-
 
 c1, c2, c3 = st.columns(3)
 with c1:
     year = st.number_input(
-        _label("Ano", "Year"),
+        t("gen.year") if t("gen.year") != "gen.year" else _label("Ano", "Year"),
         min_value=2020,
         max_value=2100,
         value=datetime.now().year,
@@ -61,7 +71,7 @@ with c1:
     )
 with c2:
     month = st.number_input(
-        _label("Mês", "Month"),
+        t("gen.month") if t("gen.month") != "gen.month" else _label("Mês", "Month"),
         min_value=1,
         max_value=12,
         value=datetime.now().month,
@@ -70,13 +80,12 @@ with c2:
     )
 with c3:
     seed = st.number_input(
-        _label("Seed (muda para embaralhar)", "Seed (change to reshuffle)"),
+        t("gen.seed") if t("gen.seed") != "gen.seed" else _label("Seed (muda para embaralhar)", "Seed (change to reshuffle)"),
         min_value=1,
         value=int(st.session_state["gen_seed"]),
         step=1,
         key="gen_seed_input",
     )
-    # keep session in sync (so it persists)
     st.session_state["gen_seed"] = int(seed)
 
 st.markdown("")
@@ -84,7 +93,7 @@ st.markdown("")
 c4, c5, c6 = st.columns(3)
 with c4:
     prefer_mobile = st.checkbox(
-        _label("Tentar preencher CÂMERA MÓVEL quando possível", "Try to fill MOBILE when possible"),
+        t("gen.prefer_mobile") if t("gen.prefer_mobile") != "gen.prefer_mobile" else _label("Tentar preencher CÂMERA MÓVEL quando possível", "Try to fill MOBILE when possible"),
         value=True,
         key="gen_prefer_mobile",
     )
@@ -119,22 +128,36 @@ use_auto_random = st.checkbox(
     ),
 )
 
+# NOTE ABOUT THE SPECIAL RULE
+st.info(
+    _label(
+        "Regra especial: **Domingo 15:00** precisa **apenas OBS** (sem câmera fixa/móvel).",
+        "Special rule: **Sunday 15:00** needs **OBS only** (no fixed/mobile camera).",
+    )
+)
 
-if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites month)"), type="primary", key="gen_go"):
+if st.button(
+    t("gen.generate_overwrite") if t("gen.generate_overwrite") != "gen.generate_overwrite" else _label("Gerar (substitui o mês inteiro)", "Generate (overwrites month)"),
+    type="primary",
+    key="gen_go",
+):
+    st.toast(_label("Gerando escala...", "Generating schedule..."), icon="⚙️")
+
     run_seed = int(seed)
     if use_auto_random:
         run_seed = random.randint(1, 1_000_000_000)
-        st.session_state["gen_seed"] = run_seed  # show what was used
+        st.session_state["gen_seed"] = run_seed
 
     clear_month_services(int(year), int(month))
 
-    # Load volunteers
+    # Load volunteers (FIX: now includes email column)
     vols = []
-    for (vid, name, phone, active, thu_ok, sun_ok, can_obs, can_fixed, can_mobile) in list_volunteers(active_only=False):
+    for (vid, name, phone, email, active, thu_ok, sun_ok, can_obs, can_fixed, can_mobile) in list_volunteers(active_only=False):
         vols.append(
             {
-                "id": vid,
+                "id": int(vid),
                 "name": name,
+                "email": email,
                 "active": bool(active),
                 "thu_ok": bool(thu_ok),
                 "sun_ok": bool(sun_ok),
@@ -144,17 +167,16 @@ if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites mo
             }
         )
 
-    # EXTRA: shuffle input volunteer order too (seeded)
+    # Shuffle volunteer input order too (seeded)
     random.Random(run_seed).shuffle(vols)
 
+    # Month services (dt_iso strings)
     services = month_services(int(year), int(month))
-
     if not services:
         st.warning(_label("Nenhum culto encontrado para esse mês.", "No services found for this month."))
         st.stop()
 
-    # Generate assignments
-    # (If you later add ensure_everyone/avoid_role_repeat args to scheduler, wire them here.)
+    # Generate assignments (base generator may still create 3 roles)
     assignments = generate_assignments(
         vols,
         services,
@@ -162,7 +184,12 @@ if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites mo
         prefer_mobile=prefer_mobile,
     )
 
-    # Persist services + assignments
+    # Enforce rule: Sunday 15:00 => OBS only (drop FIXED/MOBILE)
+    for dt_iso in list(assignments.keys()):
+        if is_sunday_1500_obs_only(dt_iso):
+            assignments[dt_iso] = {"OBS": assignments[dt_iso].get("OBS")}
+
+    # Persist services + assignments (only persist roles present)
     for dt_iso, roles in assignments.items():
         sid = ensure_service(dt_iso)
         for role, vol_id in roles.items():
@@ -170,16 +197,21 @@ if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites mo
 
     rebuild_reminders_for_month(int(year), int(month))
 
-
+    # Stats (count only required roles per service)
     id_to_name = {v["id"]: v["name"] for v in vols}
     active_ids = [v["id"] for v in vols if v["active"]]
 
     served_count = Counter()
     role_count = defaultdict(Counter)  # vid -> Counter(role)
     unfilled_slots = 0
+    total_slots = 0
 
-    for _, roles in assignments.items():
-        for role, vid in roles.items():
+    for dt_iso, roles in assignments.items():
+        required = required_roles_for_service(dt_iso)
+        total_slots += len(required)
+
+        for role in required:
+            vid = roles.get(role)
             if vid is None:
                 unfilled_slots += 1
                 continue
@@ -189,12 +221,14 @@ if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites mo
     missing = [vid for vid in active_ids if served_count.get(vid, 0) == 0]
 
     st.success(_label("Escala gerada e lembretes reconstruídos.", "Generated schedule + rebuilt reminder jobs for the month."))
+    st.toast(_label("Concluído ✅", "Done ✅"), icon="✅")
     st.caption(_label(f"Seed usado: {run_seed}", f"Seed used: {run_seed}"))
 
-    a1, a2, a3 = st.columns(3)
+    a1, a2, a3, a4 = st.columns(4)
     a1.metric(_label("Cultos", "Services"), str(len(assignments)))
-    a2.metric(_label("Slots vazios", "Empty slots"), str(unfilled_slots))
-    a3.metric(_label("Voluntários ativos", "Active volunteers"), str(len(active_ids)))
+    a2.metric(_label("Slots totais", "Total slots"), str(total_slots))
+    a3.metric(_label("Slots vazios", "Empty slots"), str(unfilled_slots))
+    a4.metric(_label("Voluntários ativos", "Active volunteers"), str(len(active_ids)))
 
     if ensure_everyone and missing:
         st.warning(
@@ -221,6 +255,7 @@ if st.button(_label("Gerar (substitui o mês inteiro)", "Generate (overwrites mo
             st.dataframe(
                 [{"volunteer": v, "role": r, "times": n} for (v, r, n) in repeats],
                 use_container_width=True,
+                hide_index=True,
             )
 
     st.caption(

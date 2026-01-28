@@ -2,15 +2,15 @@ import streamlit as st
 from src.i18n import t, get_lang
 def nav_pages(admin_enabled: bool = False):
     base = [
-        ("pages/0_Home.py", "nav.home", "🏠"),
-        ("pages/2_Schedule.py", "nav.schedule", "📅"),
-        ("pages/4_Edit.py", "nav.edit", "✏️"),
+        ("src/pages/0_Home.py", "nav.home", "🏠"),
+        ("src/pages/1_Volunteers.py", "nav.volunteers", "👥"),
+        ("src/pages/2_Schedule.py", "nav.schedule", "📅"),
+        ("src/pages/4_Edit.py", "nav.edit", "✏️"),
     ]
 
     admin_only = [
-        ("pages/1_Volunteers.py", "nav.volunteers", "👥"),
-        ("pages/3_Generate.py", "nav.generate", "⚙️"),
-        ("pages/5_Reminders.py", "nav.reminders", "⏰"),
+        ("src/pages/3_Generate.py", "nav.generate", "⚙️"),
+        ("src/pages/5_Reminders.py", "nav.reminders", "⏰"),
     ]
 
     return base + (admin_only if admin_enabled else [])
