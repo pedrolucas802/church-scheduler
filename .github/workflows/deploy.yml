@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Deploy to VPS v2
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            set -e
+            set -euo pipefail
 
             APP_DIR="${{ secrets.VPS_APP_DIR }}"
 
@@ -37,11 +37,29 @@ jobs:
             sudo -u app git fetch --all
             sudo -u app git reset --hard origin/master
 
-            echo "-> Installing deps as app"
-            sudo -u app "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+            echo "-> HARD STOP old systemd Streamlit service (prevents port 8501 conflicts)"
+            sudo -n systemctl stop church-scheduler 2>/dev/null || true
+            sudo -n systemctl disable church-scheduler 2>/dev/null || true
+            sudo -n systemctl mask church-scheduler 2>/dev/null || true
 
-            echo "-> Restarting service"
-            sudo -n /usr/bin/systemctl restart church-scheduler
+            echo "-> Stop old container stack (if any) + remove orphans"
+            sudo -u app docker compose down --remove-orphans || true
 
-            echo "-> Service status"
-            sudo -n /usr/bin/systemctl status church-scheduler --no-pager
+            echo "-> Build + start containers"
+            sudo -u app docker compose build
+            sudo -u app docker compose up -d --remove-orphans
+
+            echo "-> Check status"
+            sudo -u app docker compose ps
+
+            echo "-> Quick health check (local only)"
+            curl -fsS http://127.0.0.1:8501/_stcore/health || true
+            curl -fsS http://127.0.0.1:8501/ | head -n 3 || true
+
+            echo "-> Nginx config test + reload"
+            sudo -n nginx -t
+            sudo -n systemctl reload nginx
+
+            echo "-> Logs (tail)"
+            sudo -u app docker compose logs --tail=120 app || true
+            sudo -u app docker compose logs --tail=120 db || true
