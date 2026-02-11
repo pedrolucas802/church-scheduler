@@ -78,4 +78,4 @@ APP_VERSION = get_app_version()
 
 st.navigation(pages).run()
 
-st.sidebar.caption(f"Version {APP_VERSION}")
+st.sidebar.caption(f"Version: {APP_VERSION}")
