@@ -6,9 +6,9 @@ services:
     environment:
       POSTGRES_DB: church_scheduler
       POSTGRES_USER: church_admin
-      POSTGRES_PASSWORD: church_password
-    ports:
-      - "5433:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # ports:
+    #   - "5433:5432"
     volumes:
       - pgdata_church:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
     container_name: church_app
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg2://church_admin:church_password@db:5432/church_scheduler
+      DATABASE_URL: postgresql+psycopg2://church_admin:${POSTGRES_PASSWORD}@db:5432/church_scheduler
     depends_on:
       db:
         condition: service_healthy
