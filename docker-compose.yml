@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: church_scheduler
       POSTGRES_USER: church_admin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     # ports:
     #   - "5433:5432"
     volumes:
