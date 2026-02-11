@@ -14,20 +14,25 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U church_admin -d church_scheduler"]
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 5s
+      retries: 10
 
   app:
     build: .
     container_name: church_app
     restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://church_admin:church_password@db:5432/church_scheduler
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - .env
     ports:
       - "127.0.0.1:8501:8501"
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0
+      --server.port=8501
+      --server.headless=true
 
 volumes:
   pgdata_church:
