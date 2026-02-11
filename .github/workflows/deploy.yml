@@ -1,4 +1,4 @@
-name: Deploy to VPS v2
+name: Deploy to VPS
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
             echo "-> Moving to app dir"
             cd "$APP_DIR"
 
-            echo "-> Ensure GitHub host key is known"
+            echo "-> Ensure GitHub host key is known (for user app)"
             sudo -u app mkdir -p /home/app/.ssh
             sudo -u app chmod 700 /home/app/.ssh
             sudo -u app ssh-keyscan -H github.com >> /home/app/.ssh/known_hosts
@@ -37,29 +37,19 @@ jobs:
             sudo -u app git fetch --all
             sudo -u app git reset --hard origin/master
 
-            echo "-> HARD STOP old systemd Streamlit service (prevents port 8501 conflicts)"
-            sudo -n systemctl stop church-scheduler 2>/dev/null || true
-            sudo -n systemctl disable church-scheduler 2>/dev/null || true
-            sudo -n systemctl mask church-scheduler 2>/dev/null || true
+            echo "-> Docker compose deploy"
+            # IMPORTANT: app user must be in docker group OR we run docker with sudo.
+            # If 'app' is in docker group, you can drop sudo below.
+            sudo docker compose pull || true
+            sudo docker compose build --no-cache
+            sudo docker compose up -d --remove-orphans
 
-            echo "-> Stop old container stack (if any) + remove orphans"
-            sudo -u app docker compose down --remove-orphans || true
+            echo "-> Containers status"
+            sudo docker compose ps
 
-            echo "-> Build + start containers"
-            sudo -u app docker compose build
-            sudo -u app docker compose up -d --remove-orphans
-
-            echo "-> Check status"
-            sudo -u app docker compose ps
-
-            echo "-> Quick health check (local only)"
+            echo "-> Quick health check (local)"
             curl -fsS http://127.0.0.1:8501/_stcore/health || true
-            curl -fsS http://127.0.0.1:8501/ | head -n 3 || true
+            curl -I http://127.0.0.1:8501 || true
 
-            echo "-> Nginx config test + reload"
-            sudo -n nginx -t
-            sudo -n systemctl reload nginx
-
-            echo "-> Logs (tail)"
-            sudo -u app docker compose logs --tail=120 app || true
-            sudo -u app docker compose logs --tail=120 db || true
+            echo "-> Last logs"
+            sudo docker logs --tail=80 church_app || true
