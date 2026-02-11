@@ -1,12 +1,20 @@
+# docker-compose.yml
 services:
   db:
     image: postgres:16-alpine
     container_name: church_db
     restart: unless-stopped
+
+    # Load secrets from VPS-only file (NOT in repo)
+    env_file:
+      - /home/app/.secrets/church-scheduler.prod.env
+
     environment:
       POSTGRES_DB: church_scheduler
       POSTGRES_USER: church_admin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # will come from env_file; this keeps the nice error if someone runs without it
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in PROD env}
+
     # ports:
     #   - "5433:5432"
     volumes:
@@ -21,8 +29,15 @@ services:
     build: .
     container_name: church_app
     restart: unless-stopped
+
+    # Load secrets from VPS-only file (NOT in repo)
+    env_file:
+      - /home/app/.secrets/church-scheduler.prod.env
+
+    # Keep DATABASE_URL built from the password (also comes from env_file)
     environment:
       DATABASE_URL: postgresql+psycopg2://church_admin:${POSTGRES_PASSWORD}@db:5432/church_scheduler
+
     depends_on:
       db:
         condition: service_healthy

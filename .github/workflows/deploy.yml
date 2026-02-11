@@ -1,3 +1,4 @@
+# .github/workflows/deploy.yml
 name: deploy
 
 on:
@@ -20,9 +21,15 @@ jobs:
             set -euo pipefail
 
             APP_DIR="/home/app/apps/church-scheduler"
+            ENV_FILE="/home/app/.secrets/church-scheduler.prod.env"
 
             echo "-> Moving to app dir"
             cd "$APP_DIR"
+
+            echo "-> Ensure PROD env file exists on VPS"
+            sudo test -f "$ENV_FILE" || { echo "Missing $ENV_FILE on VPS" >&2; exit 1; }
+            sudo chmod 600 "$ENV_FILE" || true
+            sudo chown app:app "$ENV_FILE" || true
 
             echo "-> Ensure GitHub host key is known (for user app)"
             sudo -u app mkdir -p /home/app/.ssh
@@ -38,13 +45,12 @@ jobs:
             sudo -u app git fetch --all
             sudo -u app git reset --hard origin/master
 
-            echo "-> Docker compose deploy (explicit .env)"
-            # IMPORTANT: this avoids the 'POSTGRES_PASSWORD not set' warning
-            sudo docker compose --env-file .env pull || true
-            sudo docker compose --env-file .env up -d --build --remove-orphans
+            echo "-> Docker compose deploy (use VPS-only env file)"
+            sudo docker compose --env-file "$ENV_FILE" pull || true
+            sudo docker compose --env-file "$ENV_FILE" up -d --build --remove-orphans
 
             echo "-> Containers status"
-            sudo docker compose --env-file .env ps
+            sudo docker compose --env-file "$ENV_FILE" ps
 
             echo "-> Waiting for Streamlit health..."
             for i in {1..30}; do
