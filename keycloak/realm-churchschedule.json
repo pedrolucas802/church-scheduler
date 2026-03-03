@@ -1,0 +1,60 @@
+{
+  "realm": "churchschedule",
+  "enabled": true,
+  "displayName": "Church Scheduler",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "church-scheduler",
+      "name": "Church Scheduler",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "B9N7CUN45q3AJ8yD2pJZpBCaq3Ior9b3",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8501/*"],
+      "webOrigins": ["http://localhost:8501"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "ministry admin" },
+      { "name": "volunteer", "description": "volunteer user" }
+    ]
+  },
+  "users": [
+    {
+      "username": "testadmin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "123test", "temporary": false }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "testvolunteer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Volunteer",
+      "credentials": [
+        { "type": "password", "value": "ChangeMe123!", "temporary": false }
+      ],
+      "realmRoles": ["volunteer"]
+    }
+  ]
+}

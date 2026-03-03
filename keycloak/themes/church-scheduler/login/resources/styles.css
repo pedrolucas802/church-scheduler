@@ -1,0 +1,142 @@
+/* --- Base page background --- */
+html, body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(1200px circle at 10% 10%, #1f2937 0%, #0b1220 45%, #070b14 100%) !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Center container a bit nicer */
+#kc-container-wrapper {
+  padding-top: 5vh !important;
+  padding-bottom: 5vh !important;
+}
+
+/* --- The login card --- */
+.card-pf {
+  background: rgba(17, 24, 39, 0.82) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.55),
+    0 2px 12px rgba(0,0,0,0.20) !important;
+  padding: 28px 26px !important;
+  max-width: 420px !important;
+}
+
+/* Hide Keycloak "brand" header area spacing if present */
+#kc-header-wrapper {
+  padding: 0 !important;
+  margin: 0 0 18px 0 !important;
+  color: rgba(255,255,255,0.92) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2px !important;
+}
+
+/* Titles */
+#kc-page-title {
+  color: rgba(255,255,255,0.92) !important;
+  font-weight: 700 !important;
+  font-size: 20px !important;
+  margin-bottom: 4px !important;
+}
+
+#kc-content-wrapper,
+#kc-content,
+#kc-form-wrapper {
+  color: rgba(255,255,255,0.85) !important;
+}
+
+/* Labels */
+#kc-form label,
+.pf-c-form__label-text,
+.control-label {
+  color: rgba(255,255,255,0.78) !important;
+  font-weight: 600 !important;
+  margin-bottom: 6px !important;
+}
+
+/* Inputs */
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  color: rgba(255,255,255,0.92) !important;
+  border-radius: 12px !important;
+  padding: 12px 12px !important;
+  height: auto !important;
+  box-shadow: none !important;
+}
+
+input[type="text"]::placeholder,
+input[type="password"]::placeholder,
+input[type="email"]::placeholder {
+  color: rgba(255,255,255,0.42) !important;
+}
+
+/* Focus */
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus {
+  outline: none !important;
+  border-color: rgba(99, 102, 241, 0.8) !important;   /* indigo-ish */
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.20) !important;
+}
+
+/* Buttons */
+#kc-login,
+input[type="submit"],
+button[type="submit"] {
+  background: linear-gradient(135deg, #6366f1 0%, #22c55e 140%) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  font-weight: 700 !important;
+  color: white !important;
+  width: 100% !important;
+  margin-top: 10px !important;
+}
+
+#kc-login:hover,
+input[type="submit"]:hover,
+button[type="submit"]:hover {
+  filter: brightness(1.05) !important;
+  transform: translateY(-1px);
+  transition: 140ms ease;
+}
+
+/* Links (forgot password etc.) */
+a {
+  color: rgba(99, 102, 241, 0.95) !important;
+  text-decoration: none !important;
+  font-weight: 600 !important;
+}
+
+a:hover {
+  text-decoration: underline !important;
+}
+
+/* Error messages */
+.pf-m-error,
+.kc-feedback-text,
+.alert-error,
+.alert-danger {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border: 1px solid rgba(239, 68, 68, 0.30) !important;
+  color: rgba(255,255,255,0.90) !important;
+  border-radius: 12px !important;
+}
+
+/* Minor spacing tweaks */
+.form-group {
+  margin-bottom: 14px !important;
+}
+
+/* Footer / help text */
+#kc-info-wrapper,
+#kc-info-wrapper * {
+  color: rgba(255,255,255,0.55) !important;
+}

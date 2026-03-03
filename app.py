@@ -3,6 +3,9 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+from src.auth.admin_gate import admin_gate, is_admin
+from src.auth.kc import require_login, account_screen
+
 # -----------------------
 # Env (load before app imports)
 # -----------------------
@@ -13,7 +16,6 @@ load_dotenv(BASE_DIR / ".env")
 # App imports (after env)
 # -----------------------
 from src.db import init_db
-from src.auth import admin_gate, is_admin
 from src.i18n import t, language_selector
 from src.nav import nav_pages
 from src.reminders.scheduler import start_scheduler
@@ -22,10 +24,6 @@ from src.reminders.scheduler import start_scheduler
 # Helpers
 # -----------------------
 def get_app_version() -> str:
-    """
-    Reads VERSION file at repo root (same folder as app.py).
-    Falls back gracefully.
-    """
     try:
         v = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
         return v or "dev"
@@ -33,33 +31,35 @@ def get_app_version() -> str:
         return "dev"
 
 def start_scheduler_once():
-    """
-    Streamlit reruns the script a lot.
-    Ensure scheduler is started only once per process.
-    """
     if not st.session_state.get("_scheduler_started", False):
         start_scheduler()
         st.session_state["_scheduler_started"] = True
 
 # -----------------------
-# Streamlit config + DB
+# Streamlit config
 # -----------------------
 st.set_page_config(
     page_title=f"Church Scheduler v{get_app_version()}",
     layout="wide",
 )
 
-init_db()
+# -----------------------
+# Auth gate (before DB/scheduler)
+# -----------------------
+require_login()
 
-# Start background scheduler (once)
+# -----------------------
+# DB + scheduler
+# -----------------------
+init_db()
 start_scheduler_once()
 
 # -----------------------
-# UI: language + sidebar
+# UI: language + navigation
 # -----------------------
 language_selector()
 
-# Avoid unsafe_allow_html just for spacing
+# Keep your admin access UI (still in sidebar for now)
 st.sidebar.write("")
 st.sidebar.divider()
 st.sidebar.write("")
@@ -69,13 +69,17 @@ with st.sidebar.expander(t("nav.admin_access"), expanded=False):
 
 admin_enabled = is_admin()
 
+# Your existing pages
 pages = [
     st.Page(path, title=f"{icon} {t(key)}")
     for path, key, icon in nav_pages(admin_enabled=admin_enabled)
 ]
 
-APP_VERSION = get_app_version()
+# Add an actual Account screen page
+# (This is a "function page": Streamlit supports callables in st.Page)
+pages.append(st.Page(account_screen, title="👤 Account"))
 
+APP_VERSION = get_app_version()
 st.navigation(pages).run()
 
 st.sidebar.caption(f"Version: {APP_VERSION}")
