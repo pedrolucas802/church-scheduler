@@ -3,8 +3,8 @@ import re
 import streamlit as st
 import pandas as pd
 
+from src.auth.admin_gate import is_admin
 from src.db import list_volunteers, upsert_volunteer, set_volunteer_active
-from src.auth import is_admin
 from src.i18n import t, get_lang
 from src.emailer import send_email  # send pending + approved emails
 

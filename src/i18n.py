@@ -128,6 +128,7 @@ TRANSLATIONS = {
         "nav.volunteers": "Voluntários",
         "nav.generate": "Gerar escala",
         "nav.reminders": "Lembretes",
+        "nav.account": "Conta",
     },
 
     "en": {
@@ -236,5 +237,6 @@ TRANSLATIONS = {
         "nav.volunteers": "Volunteers",
         "nav.generate": "Generate schedule",
         "nav.reminders": "Reminders",
+        "nav.account": "Account",
     },
 }

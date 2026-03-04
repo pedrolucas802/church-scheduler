@@ -48,10 +48,10 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
 
-      # ✅ IMPORTANT: enable hostname v2 so KC_HOSTNAME is honored
+      # ✅ enable hostname v2 (Keycloak 25+)
       KC_FEATURES: "hostname:v2"
 
-      # ✅ IMPORTANT: advertise the exact public URL (includes port)
+      # ✅ advertise the exact public base URL (issuer)
       KC_HOSTNAME: "http://localhost:8081"
       KC_HOSTNAME_STRICT: "false"
 
@@ -60,7 +60,12 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
 
-    command: ["start-dev"]
+    # ✅ Mount realm import JSON into Keycloak import folder
+    volumes:
+      - ./keycloak/realm-churchschedule.json:/opt/keycloak/data/import/realm-churchschedule.json:ro
+
+    # ✅ Import realm automatically on startup
+    command: ["start-dev", "--import-realm"]
 
   church_app_local:
     build:

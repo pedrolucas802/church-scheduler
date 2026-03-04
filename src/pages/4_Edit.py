@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 
-from src.auth import is_admin
+from src.auth.admin_gate import is_admin
 from src.db import (
     list_volunteers,
     list_schedule_between,
@@ -11,8 +11,6 @@ from src.db import (
     resolve_swap_request,
     get_assignment_details,
     set_assignment_volunteer_by_id,
-    list_services_in_month,
-    get_assignments_for_service,
     rebuild_reminders_for_month,
 )
 from src.i18n import t, get_lang

@@ -1,10 +1,15 @@
+# app.py
 from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
 
-from src.auth.admin_gate import admin_gate, is_admin
-from src.auth.kc import require_login, account_screen
+from src.auth.admin_gate import is_admin
+from src.auth.kc import (
+    auth_widget,
+    handle_callback_if_present,
+)
+from src.ui.style_injector import inject_global_css
 
 # -----------------------
 # Env (load before app imports)
@@ -20,9 +25,7 @@ from src.i18n import t, language_selector
 from src.nav import nav_pages
 from src.reminders.scheduler import start_scheduler
 
-# -----------------------
-# Helpers
-# -----------------------
+
 def get_app_version() -> str:
     try:
         v = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
@@ -30,10 +33,12 @@ def get_app_version() -> str:
     except Exception:
         return "dev"
 
+
 def start_scheduler_once():
     if not st.session_state.get("_scheduler_started", False):
         start_scheduler()
         st.session_state["_scheduler_started"] = True
+
 
 # -----------------------
 # Streamlit config
@@ -43,10 +48,12 @@ st.set_page_config(
     layout="wide",
 )
 
+inject_global_css(BASE_DIR / "src" / "ui" / "styles.css")
+
 # -----------------------
-# Auth gate (before DB/scheduler)
+# Handle Keycloak callback early
 # -----------------------
-require_login()
+handle_callback_if_present()
 
 # -----------------------
 # DB + scheduler
@@ -55,29 +62,28 @@ init_db()
 start_scheduler_once()
 
 # -----------------------
-# UI: language + navigation
+# UI: language
 # -----------------------
 language_selector()
 
-# Keep your admin access UI (still in sidebar for now)
-st.sidebar.write("")
+# -----------------------
+# Sidebar "navbar": Auth widget (replaces old admin_gate UI)
+# -----------------------
+with st.sidebar.container():
+    auth_widget(where="sidebar")  # <-- this is the replacement
+
 st.sidebar.divider()
-st.sidebar.write("")
 
-with st.sidebar.expander(t("nav.admin_access"), expanded=False):
-    admin_gate()
-
+# Admin check (role-based; and/or password gate if you keep it in is_admin)
 admin_enabled = is_admin()
 
-# Your existing pages
+# -----------------------
+# Pages
+# -----------------------
 pages = [
     st.Page(path, title=f"{icon} {t(key)}")
     for path, key, icon in nav_pages(admin_enabled=admin_enabled)
 ]
-
-# Add an actual Account screen page
-# (This is a "function page": Streamlit supports callables in st.Page)
-pages.append(st.Page(account_screen, title="👤 Account"))
 
 APP_VERSION = get_app_version()
 st.navigation(pages).run()

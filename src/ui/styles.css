@@ -1,0 +1,11 @@
+/* ONLY primary buttons */
+div[data-testid="stButton"] > button[kind="primary"] {
+  background-color: #1E88E5 !important;
+  border-color: #1E88E5 !important;
+  color: white !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover {
+  background-color: #1565C0 !important;
+  border-color: #1565C0 !important;
+}

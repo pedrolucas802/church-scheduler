@@ -1,12 +1,18 @@
+# 0_Home.py
 import streamlit as st
 from dotenv import load_dotenv
 
 from src.db import init_db
 from src.i18n import t
+from src.auth.kc import auth_widget, handle_callback_if_present
 
 load_dotenv()
 
 st.set_page_config(page_title="Church Scheduler", layout="wide")
+
+# Complete callback if user returned from Keycloak (non-blocking)
+handle_callback_if_present()
+
 init_db()
 
 st.markdown(
@@ -52,13 +58,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.write("")  # spacing
+st.write("")
+
+# ----------------------------
+# Optional login on Home (does NOT block)
+# ----------------------------
+auth_widget(where="home")
+
+st.write("")
 
 # ----------------------------
 # Quick actions (Schedule + Swap Request)
 # ----------------------------
-# st.subheader("🚀 " + (t("home.quick_actions") if "home.quick_actions" else ("Ações rápidas" if st.session_state.get("lang","pt")=="pt" else "Quick actions")))
-
 c1, c2 = st.columns(2, gap="large")
 
 with c1:
@@ -77,8 +88,6 @@ with c1:
         t("home.open_schedule_btn") if "home.open_schedule_btn" else ("📅 Abrir escala" if st.session_state.get("lang","pt")=="pt" else "📅 Open schedule"),
         use_container_width=True
     ):
-        # Adjust the filename to match your schedule page
-        # Example: pages/3_Schedule.py
         st.switch_page("src/pages/2_Schedule.py")
 
 with c2:
@@ -97,8 +106,6 @@ with c2:
         t("home.request_swap_btn") if "home.request_swap_btn" else ("🔁 Solicitar troca" if st.session_state.get("lang","pt")=="pt" else "🔁 Request swap"),
         use_container_width=True
     ):
-        # If you want a dedicated swap page, point here.
-        # If swap requests live inside Edit page, point to it:
         st.switch_page("src/pages/4_Edit.py")
 
 st.write("")
@@ -123,7 +130,6 @@ with st.expander("ℹ️ " + (t("home.how_it_works") if "home.how_it_works" else
 - **Admin:** approve/reject requests, edit schedule, and rebuild reminders.
             """
         )
-
 
 st.info("Use o menu lateral para navegar / Use the sidebar to navigate.")
 st.markdown("</div>", unsafe_allow_html=True)
