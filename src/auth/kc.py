@@ -9,6 +9,7 @@ import time
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode, urlparse, urlunparse
 
+import jwt
 import requests
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -31,6 +32,13 @@ _COOKIE_VERIFIER_KEY = "kc_verifier"
 _SESSION_KEY = "_kc_session"
 _TEMP_STATE_KEY = "_kc_state"
 _TEMP_VERIFIER_KEY = "_kc_verifier"
+
+# -----------------------
+# Role names (realm roles)
+# -----------------------
+ROLE_SUPER_ADMIN = os.getenv("KC_ROLE_SUPER_ADMIN", "super_admin")
+ROLE_MINISTRY_ADMIN = os.getenv("KC_ROLE_MINISTRY_ADMIN", "ministry_admin")
+ROLE_VOLUNTEER = os.getenv("KC_ROLE_VOLUNTEER", "volunteer")
 
 
 def _cookie_set_temp(state: str, verifier: str) -> None:
@@ -171,21 +179,62 @@ def get_userinfo() -> Dict[str, Any]:
 
 
 def get_roles() -> list[str]:
-    u = get_userinfo()
+    sess = st.session_state.get(_SESSION_KEY) or {}
+    access_token = sess.get("access_token")
+    if not access_token:
+        return []
+    try:
+        payload = jwt.decode(access_token, options={"verify_signature": False})
+    except Exception:
+        return []
     roles: list[str] = []
 
-    realm_access = u.get("realm_access") or {}
+    realm_access = payload.get("realm_access") or {}
     r = realm_access.get("roles") or []
     if isinstance(r, list):
         roles.extend([str(x) for x in r])
 
-    ra = u.get("resource_access") or {}
+    ra = payload.get("resource_access") or {}
     client = ra.get(_client_id()) or {}
     cr = client.get("roles") or []
     if isinstance(cr, list):
         roles.extend([str(x) for x in cr])
 
     return sorted(set(roles))
+
+
+def get_username() -> str:
+    """Best-effort display name for the currently signed-in user."""
+    u = get_userinfo()
+    return str(
+        u.get("preferred_username")
+        or u.get("email")
+        or u.get("name")
+        or u.get("sub")
+        or "-"
+    )
+
+
+def has_role(role: str) -> bool:
+    return role in set(get_roles())
+
+
+def has_any_role(*roles: str) -> bool:
+    current = set(get_roles())
+    return any(r in current for r in roles if r)
+
+
+def is_super_admin() -> bool:
+    return is_logged_in() and has_role(ROLE_SUPER_ADMIN)
+
+
+def is_ministry_admin() -> bool:
+    # Scope (which ministry) is handled by the DB membership model.
+    return is_logged_in() and has_any_role(ROLE_SUPER_ADMIN, ROLE_MINISTRY_ADMIN)
+
+
+def is_volunteer_user() -> bool:
+    return is_logged_in() and has_any_role(ROLE_SUPER_ADMIN, ROLE_MINISTRY_ADMIN, ROLE_VOLUNTEER)
 
 
 # -----------------------
@@ -344,8 +393,8 @@ def start_login() -> None:
     verifier = _pkce_verifier()
     challenge = _pkce_challenge(verifier)
 
-    st.session_state["_kc_state"] = state
-    st.session_state["_kc_verifier"] = verifier
+    st.session_state[_TEMP_STATE_KEY] = state
+    st.session_state[_TEMP_VERIFIER_KEY] = verifier
     _cookie_set_temp(state, verifier)
 
     url = _authorize_url(state=state, code_challenge=challenge)
@@ -359,10 +408,8 @@ def auth_widget(where: str = "top") -> None:
     handle_callback_if_present()
 
     if is_logged_in():
-        u = get_userinfo()
         roles = get_roles()
-
-        st.caption(f"✅ {u.get('preferred_username') or u.get('email') or '-'}")
+        st.caption(f"✅ {get_username()}")
         if roles:
             st.caption("Roles: " + ", ".join(roles))
 
@@ -378,3 +425,64 @@ def auth_widget(where: str = "top") -> None:
         use_container_width=True,
     ):
         start_login()
+
+def _get_admin_token() -> str:
+    """Get admin access token for Keycloak admin API."""
+    internal = _kc_internal_base()
+    token_url = f"{internal}/realms/master/protocol/openid-connect/token"
+    
+    data = {
+        "client_id": "admin-cli",
+        "username": os.getenv("KC_ADMIN_USER", "admin"),
+        "password": os.getenv("KC_ADMIN_PASSWORD", "admin"),
+        "grant_type": "password",
+    }
+    
+    r = requests.post(token_url, data=data, timeout=10)
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def create_user_in_keycloak(username: str, email: str, first_name: str, last_name: str, password: str, roles: list[str] = None) -> str | None:
+    """Create a user in Keycloak and assign roles. Returns the user ID (kc_sub) if successful."""
+    try:
+        admin_token = _get_admin_token()
+        internal = _kc_internal_base()
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+        
+        # Create user
+        user_data = {
+            "username": username,
+            "email": email,
+            "firstName": first_name,
+            "lastName": last_name,
+            "enabled": True,
+            "emailVerified": True,
+            "credentials": [{"type": "password", "value": password, "temporary": False}],
+        }
+        
+        create_url = f"{internal}/admin/realms/{_realm()}/users"
+        r = requests.post(create_url, json=user_data, headers=headers, timeout=10)
+        if r.status_code == 409:
+            # User already exists
+            print(f"User {username} already exists in Keycloak")
+            # Try to get existing user ID
+            users_url = f"{internal}/admin/realms/{_realm()}/users?username={username}"
+            r2 = requests.get(users_url, headers=headers, timeout=10)
+            if r2.status_code == 200:
+                users_data = r2.json()
+                if users_data:
+                    return users_data[0]["id"]
+            return None
+        r.raise_for_status()
+        
+        # Get user ID from Location header
+        location = r.headers.get("Location")
+        if location:
+            user_id = location.split("/")[-1]
+            return user_id
+        
+        return None
+    except Exception as e:
+        print(f"Failed to create user in Keycloak: {e}")
+        return None

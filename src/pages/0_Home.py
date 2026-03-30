@@ -2,7 +2,7 @@
 import streamlit as st
 from dotenv import load_dotenv
 
-from src.db import init_db
+from src.db.init import init_db
 from src.i18n import t
 from src.auth.kc import auth_widget, handle_callback_if_present
 

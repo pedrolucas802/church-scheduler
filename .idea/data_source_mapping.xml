@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourcePerFileMappings">
-    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/13c90939-6ff0-4e70-bc92-da3d306fac28/console.sql" value="13c90939-6ff0-4e70-bc92-da3d306fac28" />
     <file url="das://13c90939-6ff0-4e70-bc92-da3d306fac28/database/church_scheduler/schema/public/table/admin_users.sql" value="13c90939-6ff0-4e70-bc92-da3d306fac28" />
     <file url="das://13c90939-6ff0-4e70-bc92-da3d306fac28/database/church_scheduler/schema/public/table/volunteers.sql" value="13c90939-6ff0-4e70-bc92-da3d306fac28" />
   </component>

@@ -4,7 +4,9 @@ import streamlit as st
 import pandas as pd
 
 from src.auth.admin_gate import is_admin
-from src.db import list_volunteers, upsert_volunteer, set_volunteer_active
+from src.auth.kc import get_userinfo, is_super_admin
+from src.db import list_volunteers, upsert_volunteer, set_volunteer_active, get_user_by_kc_sub, list_ministries, upsert_membership, upsert_volunteer_prefs
+from src.db.repos.memberships import list_user_ministries
 from src.i18n import t, get_lang
 from src.emailer import send_email  # send pending + approved emails
 
@@ -108,7 +110,7 @@ def is_valid_email(email: str) -> bool:
 
 def get_volunteer_by_id(vol_id: int):
     try:
-        rows2 = list_volunteers(active_only=False)
+        rows2 = list_volunteers()
     except Exception:
         return None
 
@@ -136,7 +138,7 @@ def find_existing_volunteer(email: str | None, name: str | None):
     name = (name or "").strip()
 
     try:
-        rows2 = list_volunteers(active_only=False)
+        rows2 = list_volunteers()
     except Exception:
         return None
 
@@ -228,7 +230,41 @@ def send_approved_email(to_email: str, name: str) -> tuple[bool, str]:
 # =========================
 admin = is_admin()
 
-rows = list_volunteers(active_only=False)
+# Determine which ministries the user can manage
+userinfo = get_userinfo()
+allowed_ministry_ids = None
+selected_ministry_id = None
+ministries_list = list_ministries()
+
+if admin and not is_super_admin():
+    # Ministry admin: only their ministries
+    if userinfo:
+        kc_sub = userinfo.get("sub")
+        if kc_sub:
+            user = get_user_by_kc_sub(kc_sub)
+            if user:
+                user_ministries = list_user_ministries(user["id"])
+                allowed_ministry_ids = [mid for mid, role in user_ministries]
+    
+    # Let them pick which ministry to view/manage
+    if allowed_ministry_ids:
+        ministry_names = {m["id"]: m["name"] for m in ministries_list}
+        allowed_ministry_names = {m["id"]: ministry_names[m["id"]] for m in allowed_ministry_ids}
+        
+        selected_ministry_id = st.selectbox(
+            "Selecione o ministério" if lang == "pt" else "Select ministry",
+            options=list(allowed_ministry_names.keys()),
+            format_func=lambda mid: allowed_ministry_names[mid],
+        )
+
+# Load volunteers (filtered by ministry if needed)
+if admin and not is_super_admin() and selected_ministry_id:
+    rows = list_volunteers(ministry_ids=[selected_ministry_id])
+elif admin and is_super_admin():
+    rows = list_volunteers()  # all ministries
+else:
+    rows = list_volunteers()  # public: all (but filtered anyway)
+
 df_all = pd.DataFrame(
     rows,
     columns=[
@@ -457,6 +493,23 @@ with st.form(adm_form_key, clear_on_submit=False):
     email = st.text_input(t("vol.email"), value="").strip()
     phone = st.text_input(t("vol.phone"), value="").strip()
 
+    # Let admin select ministry to assign to
+    target_ministry = None
+    if admin and selected_ministry_id:
+        # For ministry admins, pre-select their ministry
+        target_ministry = selected_ministry_id
+        ministry_names = {m["id"]: m["name"] for m in ministries_list}
+        st.info(f"{'Ministério' if lang == 'pt' else 'Ministry'}: {ministry_names.get(target_ministry)}")
+    elif admin and is_super_admin():
+        # For super admin, let them choose
+        ministry_names = {m["id"]: m["name"] for m in ministries_list}
+        target_ministry = st.selectbox(
+            "Selecione o ministério" if lang == "pt" else "Select ministry",
+            options=[m["id"] for m in ministries_list],
+            format_func=lambda mid: ministry_names[mid],
+            key="adm_ministry_select"
+        )
+
     c1, c2 = st.columns(2)
     with c1:
         active = st.checkbox(t("vol.active"), value=True)
@@ -486,6 +539,9 @@ if submit:
     elif email and not is_valid_email(email):
         toast_err(t("common.invalid_email"))
         st.error(t("common.invalid_email"))
+    elif not target_ministry:
+        toast_err("Selecione um ministério." if lang == "pt" else "Select a ministry.")
+        st.error("Selecione um ministério." if lang == "pt" else "Select a ministry.")
     else:
         # Detect pending -> active transition BEFORE upsert
         prev = find_existing_volunteer(email=email or None, name=name or None)
@@ -503,9 +559,26 @@ if submit:
             "can_obs": 1 if can_obs else 0,
             "can_fixed": 1 if can_fixed else 0,
             "can_mobile": 1 if can_mobile else 0,
-        })
+        }, ministry_id=target_ministry)
 
-        toast_ok("Salvo." if lang == "pt" else "Saved.")
+        # Also assign the volunteer to the selected ministry
+        vol_user = find_existing_volunteer(email=email or None, name=name or None)
+        if vol_user:
+            upsert_membership(target_ministry, vol_user["id"], "volunteer")
+            upsert_volunteer_prefs(
+                ministry_id=target_ministry,
+                user_id=vol_user["id"],
+                data={
+                    "active": new_active,
+                    "thu_ok": 1 if thu_ok else 0,
+                    "sun_ok": 1 if sun_ok else 0,
+                    "can_obs": 1 if can_obs else 0,
+                    "can_fixed": 1 if can_fixed else 0,
+                    "can_mobile": 1 if can_mobile else 0,
+                }
+            )
+
+        toast_ok("Salvo e atribuído ao ministério." if lang == "pt" else "Saved and assigned to ministry.")
 
         # If admin just approved (0 -> 1), send approval email
         if prev_active == 0 and new_active == 1:
@@ -604,3 +677,58 @@ if st.button("Apply / Aplicar"):
     st.rerun()
 
 st.caption(t("vol.note.upsert_key"))
+
+# -------- Manage Ministry Memberships (Admin) --------
+if admin:
+    st.subheader("Gerenciar membros do ministério" if lang == "pt" else "Manage Ministry Memberships")
+    ministry_names = {m["id"]: m["name"] for m in ministries_list}
+    if is_super_admin():
+        manage_ministry_id = st.selectbox(
+            "Selecione o ministério" if lang == "pt" else "Select ministry",
+            options=[m["id"] for m in ministries_list],
+            format_func=lambda mid: ministry_names[mid],
+            key="manage_ministry_select"
+        )
+    else:
+        manage_ministry_id = selected_ministry_id
+        st.info(f"{'Ministério' if lang == 'pt' else 'Ministry'}: {ministry_names.get(manage_ministry_id)}")
+
+    # Get all volunteers
+    all_vols = list_volunteers()
+    # Get volunteers in this ministry
+    from src.db.repos.memberships import list_user_ministries, remove_membership, upsert_membership
+    vols_in_min = []
+    vols_not_in_min = []
+    for v in all_vols:
+        vid = v[0]
+        vname = v[1]
+        vemail = v[3]
+        user_ministries = list_user_ministries(vid)
+        min_ids = [mid for mid, _ in user_ministries]
+        if manage_ministry_id in min_ids:
+            vols_in_min.append((vid, vname, vemail))
+        else:
+            vols_not_in_min.append((vid, vname, vemail))
+
+    st.markdown("**Membros atuais:**" if lang == "pt" else "**Current members:**")
+    for vid, vname, vemail in vols_in_min:
+        c1, c2 = st.columns([3,1])
+        with c1:
+            st.write(f"{vname} ({vemail})")
+        with c2:
+            if st.button("Remover" if lang == "pt" else "Remove", key=f"remove_{vid}_{manage_ministry_id}"):
+                remove_membership(manage_ministry_id, vid)
+                toast_ok("Removido." if lang == "pt" else "Removed.")
+                st.rerun()
+
+    st.markdown("**Adicionar voluntário:**" if lang == "pt" else "**Add volunteer:**")
+    for vid, vname, vemail in vols_not_in_min:
+        c1, c2 = st.columns([3,1])
+        with c1:
+            st.write(f"{vname} ({vemail})")
+        with c2:
+            if st.button("Adicionar" if lang == "pt" else "Add", key=f"add_{vid}_{manage_ministry_id}"):
+                upsert_membership(manage_ministry_id, vid, "volunteer")
+                toast_ok("Adicionado." if lang == "pt" else "Added.")
+                st.rerun()
+

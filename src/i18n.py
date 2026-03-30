@@ -129,6 +129,7 @@ TRANSLATIONS = {
         "nav.generate": "Gerar escala",
         "nav.reminders": "Lembretes",
         "nav.account": "Conta",
+        "nav.ministries": "Ministérios",
     },
 
     "en": {
@@ -238,5 +239,6 @@ TRANSLATIONS = {
         "nav.generate": "Generate schedule",
         "nav.reminders": "Reminders",
         "nav.account": "Account",
+        "nav.ministries": "Ministries",
     },
 }

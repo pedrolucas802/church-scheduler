@@ -12,9 +12,44 @@ from reportlab.lib.units import cm
 
 from src.db import list_schedule_between, list_volunteers
 from src.i18n import t, get_lang
+from src.auth.kc import get_userinfo, is_super_admin
+from src.db import get_user_by_kc_sub
+from src.db.repos.memberships import list_user_ministries
+from src.db.repos.ministries import list_ministries
 
 st.title(t("sched.title"))
 lang = get_lang()
+
+# Determine allowed ministry_ids for the user
+userinfo = get_userinfo()
+ministry_ids = None
+if userinfo:
+    kc_sub = userinfo.get("sub")
+    if kc_sub:
+        user = get_user_by_kc_sub(kc_sub)
+        if user:
+            user_id = user["id"]
+            if is_super_admin():
+                ministry_ids = None  # all
+            else:
+                user_ministries = list_user_ministries(user_id)
+                ministry_ids = [mid for mid, role in user_ministries]
+                if not ministry_ids:
+                    st.warning("You are not assigned to any ministries." if lang == "en" else "Você não está atribuído a nenhum ministério.")
+                    st.stop()
+else:
+    ministries = list_ministries()
+    options = ["All"] + [row.name for row in ministries]
+    selected_names = st.multiselect(
+        ("Select Ministries to View" if lang == "en" else "Selecionar Ministérios para Ver"),
+        options,
+        default=["All"]
+    )
+    if "All" in selected_names:
+        ministry_ids = None
+    else:
+        ministry_ids = [row.id for row in ministries if row.name in selected_names]
+
 st.markdown(
     """
     <style>
@@ -121,7 +156,6 @@ def person_span(name: str, phone: str | None) -> str:
         return "—"
     if not p:
         return f"<span class='k-person' title=''>{n}</span>"
-    # Tooltip shows phone and "tap to copy" hint
     tip = p
     return f"<span class='k-person' title='{tip}'>{n}</span>"
 
@@ -151,7 +185,6 @@ def build_pdf_bytes(year: int, month: int, by_day: dict[date, list[tuple[str, di
         return buf.getvalue()
 
     for d in days:
-        # Page break
         if y < 3.0 * cm:
             c.showPage()
             y = height - 1.6 * cm
@@ -180,7 +213,6 @@ def build_pdf_bytes(year: int, month: int, by_day: dict[date, list[tuple[str, di
     return buf.getvalue()
 
 def build_sundays_png_bytes(year: int, month: int, by_day: dict[date, list[tuple[str, dict]]]) -> bytes:
-    # Create a simple “WhatsApp-friendly” image: Sundays only, big readable lines
     sundays = [d for d in sorted(by_day.keys()) if d.month == month and d.weekday() == 6 and by_day[d]]
     lines: list[str] = []
 
@@ -206,12 +238,10 @@ def build_sundays_png_bytes(year: int, month: int, by_day: dict[date, list[tuple
     if len(lines) <= 2:
         lines = [title, "", "— " + ("Sem cultos neste mês." if lang == "pt" else "No services this month.")]
 
-    # Render with matplotlib
     fig = plt.figure(figsize=(10.5, max(6, 0.28 * len(lines))))
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis("off")
 
-    # Title a bit bigger
     y = 0.98
     for i, text in enumerate(lines):
         fs = 16 if i == 0 else (12 if text and not text.startswith("  ") else 11)
@@ -224,33 +254,39 @@ def build_sundays_png_bytes(year: int, month: int, by_day: dict[date, list[tuple
     return buf.getvalue()
 
 current_year = datetime.now().year
-YEAR = st.selectbox(
-    ("Ano" if lang == "pt" else "Year"),
-    options=list(range(current_year - 1, current_year + 3)),
-    index=1
-)
 
-month_names_pt = [
-    "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
-]
-month_names_en = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
-]
-month_names = month_names_pt if lang == "pt" else month_names_en
+col1, col2 = st.columns(2)
 
-default_month = datetime.now().month if datetime.now().year == YEAR else 1
-selected_month_name = st.selectbox(
-    ("Mês" if lang == "pt" else "Month"),
-    month_names,
-    index=max(0, min(11, default_month - 1))
-)
+with col1:
+    YEAR = st.selectbox(
+        ("Ano" if lang == "pt" else "Year"),
+        options=list(range(current_year - 1, current_year + 3)),
+        index=1
+    )
+
+with col2:
+    month_names_pt = [
+        "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+        "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
+    ]
+    month_names_en = [
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+    ]
+    month_names = month_names_pt if lang == "pt" else month_names_en
+
+    default_month = datetime.now().month if datetime.now().year == YEAR else 1
+    selected_month_name = st.selectbox(
+        ("Mês" if lang == "pt" else "Month"),
+        month_names,
+        index=max(0, min(11, default_month - 1))
+    )
+
+
 month = month_names.index(selected_month_name) + 1
 
 name_filter = st.text_input(t("sched.filter")).strip().lower()
 
-# View toggle (includes Sunday zoom mode)
 view = st.segmented_control(
     ("Visualização" if lang == "pt" else "View"),
     options=[
@@ -265,10 +301,9 @@ start_dt = datetime(YEAR, month, 1)
 last_day = calendar.monthrange(YEAR, month)[1]
 end_dt = datetime(YEAR, month, last_day, 23, 59, 59)
 
-rows = list_schedule_between(start_dt.isoformat(), end_dt.isoformat())
+rows = list_schedule_between(start_dt.isoformat(), end_dt.isoformat(), ministry_ids=ministry_ids)
 
-# Map volunteer -> phone for hover tooltips
-vol_rows = list_volunteers(active_only=False)
+vol_rows = list_volunteers(active_only=False, ministry_ids=ministry_ids)
 name_to_phone: dict[str, str] = {}
 for _vid, vname, vphone, *_rest in vol_rows:
     if vname:
@@ -288,15 +323,20 @@ def service_matches_filter(svc: dict) -> bool:
         return True
     return any(name_filter in safe(svc.get(r)).lower() for r in ["OBS", "FIXED", "MOBILE"])
 
-# Next service day (true “next service”, not “next day”)
-now = datetime.now()
+# -------------------------
+# FIX: timezone-safe "next service"
+# -------------------------
+service_dts = sorted({datetime.fromisoformat(dt_iso) for dt_iso in services_map.keys()})
+tz = next((d.tzinfo for d in service_dts if d.tzinfo is not None), None)
+
+now = datetime.now(tz=tz) if tz else datetime.now()
 GRACE_MINUTES = 180
 threshold = now - timedelta(minutes=GRACE_MINUTES)
-service_dts = sorted({datetime.fromisoformat(dt_iso) for dt_iso in services_map.keys()})
+
 next_service_dt = next((d for d in service_dts if d >= threshold), None)
 next_service_day = next_service_dt.date() if next_service_dt else None
+# -------------------------
 
-# Group by day
 by_day = defaultdict(list)
 for dt_iso, svc in services_map.items():
     dt = datetime.fromisoformat(dt_iso)
@@ -304,9 +344,7 @@ for dt_iso, svc in services_map.items():
 for d in by_day:
     by_day[d].sort(key=lambda x: x[0])
 
-st.markdown(
-    f"#### {selected_month_name} {YEAR}",
-)
+st.markdown(f"#### {selected_month_name} {YEAR}")
 c_export1, c_export2 = st.columns([1, 1])
 with c_export1:
     pdf_bytes = build_pdf_bytes(
@@ -408,7 +446,6 @@ elif "Domingos" in view or "Sundays" in view:
                 st.caption("—")
                 continue
 
-            # Bigger, clearer per service block
             for dt_iso, svc in day_items:
                 dt = datetime.fromisoformat(dt_iso)
 
@@ -467,11 +504,9 @@ else:
                     continue
 
                 is_next = (next_service_day == day)
-                cls = "k-dayCell k-nextDay" if is_next else "k-dayCell"
                 tag = f"<span class='k-nextLabel'>{'PRÓXIMO' if lang=='pt' else 'NEXT'}</span>" if is_next else ""
                 st.markdown(f"<div class='k-day'>{day.day} {tag}</div>", unsafe_allow_html=True)
 
-                # services
                 day_items = [(dt_iso, svc) for (dt_iso, svc) in by_day.get(day, []) if service_matches_filter(svc)]
                 if not day_items:
                     st.caption("—")

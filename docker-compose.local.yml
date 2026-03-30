@@ -1,3 +1,4 @@
+# docker-compose.local.yml
 services:
   db_local:
     image: postgres:16
@@ -10,6 +11,8 @@ services:
       - "5432:5432"
     volumes:
       - church_db_data:/var/lib/postgresql/data
+      # NOTE: we are using SQLAlchemy metadata.create_all via src/db/init.py
+      # so we DO NOT mount ./db/init here.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U church_admin -d church_scheduler"]
       interval: 5s
@@ -48,24 +51,54 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
 
-      # ✅ enable hostname v2 (Keycloak 25+)
+      # Keycloak 25+: hostname v2
       KC_FEATURES: "hostname:v2"
 
-      # ✅ advertise the exact public base URL (issuer)
+      # Public issuer base (what the browser uses)
       KC_HOSTNAME: "http://localhost:8081"
       KC_HOSTNAME_STRICT: "false"
 
-      # Useful in dev
+      # Dev options
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
 
-    # ✅ Mount realm import JSON into Keycloak import folder
     volumes:
+      # Realm import file (must exist on host)
       - ./keycloak/realm-churchschedule.json:/opt/keycloak/data/import/realm-churchschedule.json:ro
 
-    # ✅ Import realm automatically on startup
     command: ["start-dev", "--import-realm"]
+
+  # Runs once, exits. App depends on it completing successfully.
+  seed_local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: church-scheduler-church_app:latest
+    container_name: seed_local
+    depends_on:
+      db_local:
+        condition: service_healthy
+      keycloak_local:
+        condition: service_started
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app
+      DATABASE_URL: ${DATABASE_URL}
+      KC_BASE_URL: ${KC_BASE_URL}
+      KC_PUBLIC_BASE_URL: ${KC_PUBLIC_BASE_URL}
+      KC_REALM: ${KC_REALM}
+      KC_CLIENT_ID: ${KC_CLIENT_ID}
+      KC_CLIENT_SECRET: ${KC_CLIENT_SECRET}
+      KC_ADMIN_USER: ${KC_ADMIN_USER}
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+    command:
+      - bash
+      - -lc
+      - |
+        python -c "from src.db.init import init_db; init_db()"
+        python -m src.scripts.seed_mock_data
+    restart: "no"
 
   church_app_local:
     build:
@@ -78,15 +111,17 @@ services:
         condition: service_healthy
       keycloak_local:
         condition: service_started
+      seed_local:
+        condition: service_completed_successfully
     ports:
       - "8501:8501"
     environment:
       DATABASE_URL: ${DATABASE_URL}
 
-      # Container -> Keycloak (internal)
+      # Container -> Keycloak (internal Docker network)
       KC_BASE_URL: ${KC_BASE_URL}
 
-      # Browser -> Keycloak (public)
+      # Browser -> Keycloak (public address)
       KC_PUBLIC_BASE_URL: ${KC_PUBLIC_BASE_URL}
 
       KC_REALM: ${KC_REALM}

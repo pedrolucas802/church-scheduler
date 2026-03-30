@@ -5,10 +5,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from src.auth.admin_gate import is_admin
-from src.auth.kc import (
-    auth_widget,
-    handle_callback_if_present,
-)
+from src.auth.kc import auth_widget, handle_callback_if_present
 from src.ui.style_injector import inject_global_css
 
 # -----------------------
@@ -20,7 +17,7 @@ load_dotenv(BASE_DIR / ".env")
 # -----------------------
 # App imports (after env)
 # -----------------------
-from src.db import init_db
+from src.db.init import init_db
 from src.i18n import t, language_selector
 from src.nav import nav_pages
 from src.reminders.scheduler import start_scheduler
@@ -67,19 +64,15 @@ start_scheduler_once()
 language_selector()
 
 # -----------------------
-# Sidebar "navbar": Auth widget (replaces old admin_gate UI)
+# Sidebar "navbar": Auth widget
 # -----------------------
 with st.sidebar.container():
-    auth_widget(where="sidebar")  # <-- this is the replacement
+    auth_widget(where="sidebar")
 
 st.sidebar.divider()
 
-# Admin check (role-based; and/or password gate if you keep it in is_admin)
 admin_enabled = is_admin()
 
-# -----------------------
-# Pages
-# -----------------------
 pages = [
     st.Page(path, title=f"{icon} {t(key)}")
     for path, key, icon in nav_pages(admin_enabled=admin_enabled)

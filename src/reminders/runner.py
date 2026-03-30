@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from _pydatetime import _format_time
 from datetime import datetime
 
-from src.db import mark_reminders_sent, list_due_reminders_for_email
+from src.db.repos.reminders import list_due_reminders_for_email, mark_reminders_sent
 from src.emailer import send_email
 from src.i18n import get_lang
 

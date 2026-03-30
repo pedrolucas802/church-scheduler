@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+from src.auth.admin_gate import is_admin
 from src.db import (
     list_reminders,
     mark_reminder_sent,
@@ -13,7 +14,6 @@ from src.db import (
     assignments,
     reminder_jobs,
 )
-from src.auth import is_admin
 from src.i18n import t, get_lang
 from src.emailer import send_email
 

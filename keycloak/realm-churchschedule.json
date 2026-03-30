@@ -29,21 +29,33 @@
   ],
   "roles": {
     "realm": [
-      { "name": "admin", "description": "ministry admin" },
+      { "name": "super_admin", "description": "platform super admin (all ministries)" },
+      { "name": "ministry_admin", "description": "admin of a ministry (scope via DB membership)" },
       { "name": "volunteer", "description": "volunteer user" }
     ]
   },
   "users": [
     {
+      "username": "testsuper",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Super Admin",
+      "credentials": [
+        { "type": "password", "value": "123test", "temporary": false }
+      ],
+      "realmRoles": ["super_admin"]
+    },
+    {
       "username": "testadmin",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Test",
-      "lastName": "Admin",
+      "lastName": "Ministry Admin",
       "credentials": [
         { "type": "password", "value": "123test", "temporary": false }
       ],
-      "realmRoles": ["admin"]
+      "realmRoles": ["ministry_admin"]
     },
     {
       "username": "testvolunteer",
@@ -52,7 +64,187 @@
       "firstName": "Test",
       "lastName": "Volunteer",
       "credentials": [
-        { "type": "password", "value": "ChangeMe123!", "temporary": false }
+        { "type": "password", "value": "123test", "temporary": false }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "joao.silva",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "João",
+      "lastName": "Silva",
+      "email": "joao@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "maria.santos",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Maria",
+      "lastName": "Santos",
+      "email": "maria@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "pedro.oliveira",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Pedro",
+      "lastName": "Oliveira",
+      "email": "pedro@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "ana.costa",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ana",
+      "lastName": "Costa",
+      "email": "ana@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "carlos.lima",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Carlos",
+      "lastName": "Lima",
+      "email": "carlos@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "beatriz.souza",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Beatriz",
+      "lastName": "Souza",
+      "email": "beatriz@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "fernando.alves",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Fernando",
+      "lastName": "Alves",
+      "email": "fernando@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "gabriela.rocha",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Gabriela",
+      "lastName": "Rocha",
+      "email": "gabriela@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "henrique.mendes",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Henrique",
+      "lastName": "Mendes",
+      "email": "henrique@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "isabela.ferreira",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Isabela",
+      "lastName": "Ferreira",
+      "email": "isabela@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "lucas.pereira",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Lucas",
+      "lastName": "Pereira",
+      "email": "lucas@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "mariana.gomes",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Mariana",
+      "lastName": "Gomes",
+      "email": "mariana@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "nicolas.santos",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Nicolas",
+      "lastName": "Santos",
+      "email": "nicolas@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "olivia.ribeiro",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Olivia",
+      "lastName": "Ribeiro",
+      "email": "olivia@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
+      ],
+      "realmRoles": ["volunteer"]
+    },
+    {
+      "username": "paulo.vieira",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Paulo",
+      "lastName": "Vieira",
+      "email": "paulo@local",
+      "credentials": [
+        { "type": "password", "value": "TempPass123!", "temporary": true }
       ],
       "realmRoles": ["volunteer"]
     }

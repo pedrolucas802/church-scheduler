@@ -4,7 +4,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from src.auth import is_admin
+from src.auth.admin_gate import is_admin
 from src.db import (
     list_volunteers,
     clear_month_services,
