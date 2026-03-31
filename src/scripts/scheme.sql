@@ -97,6 +97,15 @@ CREATE TABLE IF NOT EXISTS reminder_jobs (
 CREATE INDEX IF NOT EXISTS idx_reminder_jobs_status_send_at ON reminder_jobs(status, send_at_iso);
 CREATE INDEX IF NOT EXISTS idx_reminder_jobs_assignment_id ON reminder_jobs(assignment_id);
 
+-- -------------------------
+-- app_settings
+-- -------------------------
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NULL,
+  updated_at TEXT NOT NULL
+);
+
 COMMIT;
 
 -- =========================================================

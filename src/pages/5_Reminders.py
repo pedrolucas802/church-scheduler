@@ -4,12 +4,18 @@ import pandas as pd
 import streamlit as st
 
 from src.auth import is_admin
-from src.db import list_reminders, mark_reminder_sent
+from src.db import list_reminders, list_sent_reminders, mark_reminder_sent
 from src.i18n import get_lang, t
 from src.reminders.runner import (
     now_in_fortaleza_naive,
     role_label,
     send_due_whatsapp_reminders,
+)
+from src.reminders.scheduler import (
+    apply_scheduler_setting,
+    scheduler_enabled,
+    scheduler_running,
+    set_scheduler_enabled,
 )
 from src.services.evolution_api_service import (
     EvolutionAPIService,
@@ -86,6 +92,110 @@ st.caption(t("rem.admin_note"))
 if not is_admin():
     st.warning(t("common.admin_required"))
     st.stop()
+
+st.divider()
+st.subheader("🤖 " + ("Automação de reminders" if lang == "pt" else "Reminder automation"))
+
+automation_enabled = scheduler_enabled()
+automation_running = scheduler_running()
+
+if automation_enabled:
+    st.success(
+        (
+            "Automação ligada. O scheduler de reminders está habilitado."
+            if lang == "pt"
+            else "Automation is on. The reminder scheduler is enabled."
+        )
+        + (" (running)" if automation_running and lang != "pt" else (" (rodando)" if automation_running else ""))
+    )
+else:
+    st.warning(
+        "Automação desligada. Nenhum reminder automatico será enviado."
+        if lang == "pt"
+        else "Automation is off. No automatic reminders will be sent."
+    )
+
+toggle_col1, toggle_col2 = st.columns(2)
+with toggle_col1:
+    st.button(
+        "🟢 " + ("Ligar automação" if lang == "pt" else "Enable automation"),
+        disabled=is_page_action_busy(PAGE_KEY) or automation_enabled,
+        on_click=queue_page_action,
+        args=(PAGE_KEY, "enable_scheduler"),
+        use_container_width=True,
+    )
+with toggle_col2:
+    st.button(
+        "⏸️ " + ("Desligar automação" if lang == "pt" else "Disable automation"),
+        disabled=is_page_action_busy(PAGE_KEY) or (not automation_enabled),
+        on_click=queue_page_action,
+        args=(PAGE_KEY, "disable_scheduler"),
+        use_container_width=True,
+    )
+
+enable_scheduler_action = consume_page_action(PAGE_KEY, "enable_scheduler")
+if enable_scheduler_action is not None:
+    try:
+        with st.spinner("Ligando automação..." if lang == "pt" else "Enabling automation..."):
+            set_scheduler_enabled(True)
+            apply_scheduler_setting()
+        st.toast(
+            "Automação de reminders ligada."
+            if lang == "pt"
+            else "Reminder automation enabled.",
+            icon="✅",
+        )
+        st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
+
+disable_scheduler_action = consume_page_action(PAGE_KEY, "disable_scheduler")
+if disable_scheduler_action is not None:
+    try:
+        with st.spinner("Desligando automação..." if lang == "pt" else "Disabling automation..."):
+            set_scheduler_enabled(False)
+            apply_scheduler_setting()
+        st.toast(
+            "Automação de reminders desligada."
+            if lang == "pt"
+            else "Reminder automation disabled.",
+            icon="⏸️",
+        )
+        st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
+
+sent_log_rows = list_sent_reminders(limit=50)
+st.caption(
+    "Últimos reminders enviados."
+    if lang == "pt"
+    else "Most recent sent reminders."
+)
+if sent_log_rows:
+    sent_df = pd.DataFrame(
+        sent_log_rows,
+        columns=["id", "sent_at", "send_at_iso", "service_dt", "role", "name", "phone", "attempts"],
+    )
+    sent_df["role"] = sent_df["role"].apply(lambda role: role_label(role, lang))
+    sent_df = sent_df.rename(
+        columns={
+            "id": "ID",
+            "sent_at": "Enviado em" if lang == "pt" else "Sent at",
+            "send_at_iso": "Previsto" if lang == "pt" else "Scheduled at",
+            "service_dt": "Culto" if lang == "pt" else "Service",
+            "role": "Função" if lang == "pt" else "Role",
+            "name": "Nome" if lang == "pt" else "Name",
+            "phone": "Telefone" if lang == "pt" else "Phone",
+            "attempts": "Tentativas" if lang == "pt" else "Attempts",
+        }
+    )
+    st.dataframe(sent_df, use_container_width=True, hide_index=True)
+else:
+    st.info(
+        "Nenhum reminder foi enviado ainda."
+        if lang == "pt"
+        else "No reminders have been sent yet."
+    )
 
 rem_by_id = {int(row[0]): row for row in rows}
 

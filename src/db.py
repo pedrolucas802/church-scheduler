@@ -107,6 +107,14 @@ reminder_jobs = Table(
     Column("sent_at", String, nullable=True),
 )
 
+app_settings = Table(
+    "app_settings",
+    _metadata,
+    Column("key", String, primary_key=True),
+    Column("value", Text, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
 
 # ---------------- Engine helpers ----------------
 def engine() -> Engine:
@@ -622,3 +630,60 @@ def mark_reminders_sent(reminder_ids: list[int]):
             .where(reminder_jobs.c.id.in_(reminder_ids))
             .values(status="SENT", sent_at=datetime.utcnow().isoformat())
         )
+
+
+# ---------------- App settings ----------------
+def get_app_setting(key: str, default: str | None = None) -> str | None:
+    stmt = select(app_settings.c.value).where(app_settings.c.key == key).limit(1)
+    with engine().connect() as conn:
+        value = conn.execute(stmt).scalar_one_or_none()
+    return default if value is None else str(value)
+
+
+def get_bool_app_setting(key: str, default: bool = False) -> bool:
+    raw = get_app_setting(key)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_app_setting(key: str, value: str | None):
+    now = datetime.utcnow().isoformat()
+    stmt = (
+        pg_insert(app_settings)
+        .values(key=key, value=value, updated_at=now)
+        .on_conflict_do_update(
+            index_elements=[app_settings.c.key],
+            set_={"value": value, "updated_at": now},
+        )
+    )
+    with engine().begin() as conn:
+        conn.execute(stmt)
+
+
+def list_sent_reminders(limit: int = 50):
+    stmt = (
+        select(
+            reminder_jobs.c.id,
+            reminder_jobs.c.sent_at,
+            reminder_jobs.c.send_at_iso,
+            services.c.dt_iso.label("service_dt"),
+            assignments.c.role,
+            volunteers.c.name,
+            volunteers.c.phone,
+            reminder_jobs.c.attempts,
+        )
+        .select_from(
+            reminder_jobs
+            .join(assignments, assignments.c.id == reminder_jobs.c.assignment_id)
+            .join(services, services.c.id == assignments.c.service_id)
+            .outerjoin(volunteers, volunteers.c.id == assignments.c.volunteer_id)
+        )
+        .where(reminder_jobs.c.status == "SENT")
+        .where(reminder_jobs.c.sent_at.is_not(None))
+        .order_by(reminder_jobs.c.sent_at.desc())
+        .limit(int(limit))
+    )
+
+    with engine().connect() as conn:
+        return conn.execute(stmt).fetchall()
