@@ -240,18 +240,18 @@ def build_confirmation_message(sent_at: datetime) -> str:
 
     if lang == "pt":
         return (
-            "✅ Checklist da transmissão confirmada\n\n"
-            f"Data/Hora: {format_dt_for_message(sent_at)}\n"
+            "Checklist da transmissão concluído com sucesso.\n\n"
+            f"Horário da confirmação: {format_dt_for_message(sent_at)}\n"
             f"Itens concluídos: {completed}/{total}\n"
-            "Resumo:\n"
+            "Resumo por etapa:\n"
             + "\n".join(section_lines)
         )
 
     return (
-        "✅ Streaming checklist confirmed\n\n"
-        f"Date/Time: {format_dt_for_message(sent_at)}\n"
+        "Streaming checklist completed successfully.\n\n"
+        f"Confirmation time: {format_dt_for_message(sent_at)}\n"
         f"Completed items: {completed}/{total}\n"
-        "Summary:\n"
+        "Section summary:\n"
         + "\n".join(section_lines)
     )
 

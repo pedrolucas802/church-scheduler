@@ -110,16 +110,20 @@ def build_month_schedule_whatsapp_text(
     if lang == "pt":
         return (
             f"Olá, {vol_name}!\n\n"
-            f"Sua escala de transmissão de {month_year_label(year, month, lang)} ficou assim:\n\n"
+            f"Segue sua escala de transmissão de {month_year_label(year, month, lang)}.\n\n"
+            "Confira os cultos e horários abaixo:\n\n"
             f"{lines}\n\n"
-            "Se tiver algum impedimento, avise o quanto antes para tentarmos ajustar."
+            "Se perceber qualquer conflito ou imprevisto, avise o quanto antes para conseguirmos ajustar.\n\n"
+            "Obrigado por servir."
         )
 
     return (
         f"Hi {vol_name}!\n\n"
-        f"Your streaming schedule for {month_year_label(year, month, lang)} is:\n\n"
+        f"Here is your streaming schedule for {month_year_label(year, month, lang)}.\n\n"
+        "Please check the services and times below:\n\n"
         f"{lines}\n\n"
-        "If you have any conflict, please let us know as soon as possible so we can adjust it."
+        "If you notice any conflict or issue, please let us know as soon as possible so we can adjust it.\n\n"
+        "Thanks for serving."
     )
 
 

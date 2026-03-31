@@ -132,16 +132,22 @@ def build_reminder_whatsapp_text(vol_name: str, day: datetime, items: list[dict]
     if lang == "pt":
         return (
             f"Olá, {vol_name}!\n\n"
-            f"Lembrete da sua escala de transmissão para amanhã ({day.strftime('%d/%m/%Y')}):\n\n"
+            "Passando para lembrar da sua escala de transmissão.\n\n"
+            f"Data: {day.strftime('%d/%m/%Y')}\n"
+            "Você está escalado nestes horários:\n\n"
             f"{lines}\n\n"
-            "Se tiver algum impedimento, avise o quanto antes para tentarmos trocar."
+            "Se surgir qualquer imprevisto, avise o quanto antes para conseguirmos ajustar.\n\n"
+            "Obrigado por servir."
         )
 
     return (
         f"Hi {vol_name}!\n\n"
-        f"Reminder for your streaming schedule tomorrow ({day.strftime('%Y-%m-%d')}):\n\n"
+        "Just a quick reminder about your streaming schedule.\n\n"
+        f"Date: {day.strftime('%Y-%m-%d')}\n"
+        "You are scheduled for:\n\n"
         f"{lines}\n\n"
-        "If you can’t make it, please let us know as soon as possible so we can arrange a swap."
+        "If anything comes up, please let us know as soon as possible so we can adjust it.\n\n"
+        "Thanks for serving."
     )
 
 

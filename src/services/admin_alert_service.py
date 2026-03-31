@@ -54,21 +54,23 @@ def build_pending_edit_alert_text(
 ) -> str:
     if lang == "pt":
         return (
-            "Alerta de admin: ha um pedido pendente de alteracao na escala.\n\n"
+            "Olá! Chegou um novo pedido de alteração na escala.\n\n"
+            "Resumo para revisão:\n"
             f"Culto: {pretty_dt(service_dt, lang)}\n"
-            f"Funcao: {role_label(role, lang)}\n"
-            f"Atual: {current_volunteer}\n"
+            f"Função: {role_label(role, lang)}\n"
+            f"Escalado atual: {current_volunteer}\n"
             f"Solicitante: {requester}\n"
             f"Substituto sugerido: {replacement}\n"
             f"Motivo: {reason or '—'}\n\n"
-            "Abra a pagina Editar / Trocas para aprovar ou rejeitar."
+            "Abra a página Editar / Trocas para aprovar ou rejeitar."
         )
 
     return (
-        "Admin alert: there is a pending schedule edit request.\n\n"
+        "Hello. A new schedule change request has come in.\n\n"
+        "Review summary:\n"
         f"Service: {pretty_dt(service_dt, lang)}\n"
         f"Role: {role_label(role, lang)}\n"
-        f"Current: {current_volunteer}\n"
+        f"Currently assigned: {current_volunteer}\n"
         f"Requester: {requester}\n"
         f"Suggested replacement: {replacement}\n"
         f"Reason: {reason or '—'}\n\n"

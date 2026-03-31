@@ -29,16 +29,20 @@ def _single_reminder_message(service_dt: datetime, role: str, name: str) -> str:
     if lang == "pt":
         return (
             f"Olá, {name}!\n\n"
-            "Lembrete da sua escala de transmissão:\n\n"
-            f"- {service_dt.strftime('%d/%m/%Y %H:%M')} — {role_label(role, lang)}\n\n"
-            "Se tiver algum impedimento, avise o quanto antes para tentarmos trocar."
+            "Passando para lembrar da sua escala de transmissão.\n\n"
+            f"Data e horário: {service_dt.strftime('%d/%m/%Y %H:%M')}\n"
+            f"Função: {role_label(role, lang)}\n\n"
+            "Se surgir qualquer imprevisto, avise o quanto antes para conseguirmos ajustar.\n\n"
+            "Obrigado por servir."
         )
 
     return (
         f"Hi {name}!\n\n"
-        "Reminder for your streaming schedule:\n\n"
-        f"- {service_dt.strftime('%Y-%m-%d %H:%M')} — {role_label(role, lang)}\n\n"
-        "If you can’t make it, please let us know as soon as possible so we can arrange a swap."
+        "Just a quick reminder about your streaming schedule.\n\n"
+        f"Date and time: {service_dt.strftime('%Y-%m-%d %H:%M')}\n"
+        f"Role: {role_label(role, lang)}\n\n"
+        "If anything comes up, please let us know as soon as possible so we can adjust it.\n\n"
+        "Thanks for serving."
     )
 
 
@@ -291,6 +295,101 @@ if simulate_action is not None:
         mark_reminder_sent(int(simulate_action["rid"]))
         st.toast("OK ✅", icon="✅")
         st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
+
+st.divider()
+st.subheader(
+    "📝 "
+    + (
+        "Enviar mensagem manual por WhatsApp"
+        if lang == "pt"
+        else "Send custom WhatsApp message"
+    )
+)
+st.caption(
+    (
+        "Use este bloco para testar envios ou mandar uma mensagem manual para qualquer número."
+        if lang == "pt"
+        else "Use this section to test sends or deliver a manual message to any number."
+    )
+)
+
+manual_number = st.text_input(
+    "Número de destino" if lang == "pt" else "Destination number",
+    placeholder="5585999999999",
+    key="manual_whatsapp_number",
+)
+manual_text = st.text_area(
+    "Mensagem" if lang == "pt" else "Message",
+    placeholder=(
+        "Olá! Esta é uma mensagem manual enviada pelo Church Scheduler."
+        if lang == "pt"
+        else "Hello! This is a manual message sent from Church Scheduler."
+    ),
+    height=140,
+    key="manual_whatsapp_text",
+)
+
+st.button(
+    "📨 " + ("Enviar mensagem manual" if lang == "pt" else "Send custom message"),
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(
+        PAGE_KEY,
+        "send_manual_whatsapp",
+        {
+            "number": manual_number,
+            "text": manual_text,
+        },
+    ),
+)
+
+manual_send_action = consume_page_action(PAGE_KEY, "send_manual_whatsapp")
+if manual_send_action is not None:
+    try:
+        raw_number = str(manual_send_action.get("number") or "").strip()
+        raw_text = str(manual_send_action.get("text") or "").strip()
+
+        destination_number = normalize_whatsapp_number(raw_number)
+        if not destination_number:
+            st.toast(
+                "Informe um número de WhatsApp válido."
+                if lang == "pt"
+                else "Enter a valid WhatsApp number.",
+                icon="⚠️",
+            )
+        elif not raw_text:
+            st.toast(
+                "Digite uma mensagem antes de enviar."
+                if lang == "pt"
+                else "Enter a message before sending.",
+                icon="⚠️",
+            )
+        else:
+            service = EvolutionAPIService.from_env()
+            if service is None:
+                missing = ", ".join(EvolutionAPIService.missing_env_vars())
+                st.toast(
+                    (
+                        f"Configuração do Evolution incompleta: {missing}"
+                        if lang == "pt"
+                        else f"Evolution config is incomplete: {missing}"
+                    ),
+                    icon="⚠️",
+                )
+            else:
+                with st.spinner("Enviando mensagem..." if lang == "pt" else "Sending message..."):
+                    response = service.send_text(number=destination_number, text=raw_text)
+                if response.success:
+                    st.toast(
+                        "Mensagem enviada com sucesso."
+                        if lang == "pt"
+                        else "Message sent successfully.",
+                        icon="📨",
+                    )
+                else:
+                    st.toast(_friendly_send_error(response.error), icon="❌")
     finally:
         clear_page_action(PAGE_KEY)
 
