@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -10,11 +11,20 @@ _scheduler = None
 FORTALEZA_TZ = ZoneInfo("America/Fortaleza")
 
 
+def scheduler_enabled() -> bool:
+    raw = (os.getenv("REMINDER_SCHEDULER_ENABLED") or "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 def start_scheduler():
     global _scheduler
 
     if _scheduler:
         return  # already running
+
+    if not scheduler_enabled():
+        print("[SCHEDULER] Reminder scheduler disabled by REMINDER_SCHEDULER_ENABLED")
+        return
 
     scheduler = BackgroundScheduler(timezone="America/Fortaleza")
 
