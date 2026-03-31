@@ -31,6 +31,11 @@ jobs:
             sudo chmod 600 "$ENV_FILE" || true
             sudo chown app:app "$ENV_FILE" || true
 
+            echo "-> Validate required env keys"
+            for key in POSTGRES_PASSWORD DATABASE_URL EVOLUTION_PUBLIC_URL EVOLUTION_API_INSTANCE EVOLUTION_API_KEY EVOLUTION_DATABASE_CONNECTION_URI; do
+              sudo grep -q "^${key}=" "$ENV_FILE" || { echo "Missing ${key} in $ENV_FILE" >&2; exit 1; }
+            done
+
             echo "-> Ensure GitHub host key is known (for user app)"
             sudo -u app mkdir -p /home/app/.ssh
             sudo -u app chmod 700 /home/app/.ssh
@@ -76,3 +81,4 @@ jobs:
 
             echo "-> Last logs"
             sudo docker logs --tail=120 church_app || true
+            sudo docker logs --tail=120 evolution_api || true
