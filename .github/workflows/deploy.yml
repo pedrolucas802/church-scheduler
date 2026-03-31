@@ -43,6 +43,12 @@ jobs:
 
             echo "-> Pulling latest code as app"
             sudo -u app git fetch --all
+
+            echo "-> Repair repo ownership and clear Python caches"
+            sudo chown -R app:app "$APP_DIR"
+            sudo find "$APP_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
+            sudo find "$APP_DIR" -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete
+
             sudo -u app git reset --hard origin/master
 
             echo "-> Docker compose deploy (use VPS-only env file)"
