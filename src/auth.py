@@ -10,10 +10,12 @@ from src.db import (
     admin_record_failed_login,
     admin_reset_failures,
 )
+from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 
 SESSION_TTL_MINUTES = int(os.getenv("ADMIN_SESSION_TTL_MINUTES", "60"))
 MAX_FAILED_ATTEMPTS = int(os.getenv("ADMIN_MAX_FAILED_ATTEMPTS", "8"))
 LOCKOUT_MINUTES = int(os.getenv("ADMIN_LOCKOUT_MINUTES", "15"))
+AUTH_PAGE_KEY = "auth_admin_gate"
 
 
 def _utcnow() -> datetime:
@@ -72,9 +74,17 @@ def admin_gate():
         with c1:
             st.caption(f"Session expires in ~{SESSION_TTL_MINUTES} min (rolling).")
         with c2:
-            if st.button("Disable admin", key="admin_disable_btn"):
-                disable_admin()
-                st.rerun()
+            st.button(
+                "Disable admin",
+                key="admin_disable_btn",
+                disabled=is_page_action_busy(AUTH_PAGE_KEY),
+                on_click=queue_page_action,
+                args=(AUTH_PAGE_KEY, "disable_admin"),
+            )
+        if consume_page_action(AUTH_PAGE_KEY, "disable_admin") is not None:
+            clear_page_action(AUTH_PAGE_KEY)
+            disable_admin()
+            st.rerun()
         return
 
     row = get_admin_user("admin")
@@ -101,8 +111,19 @@ def admin_gate():
     pwd = st.text_input("Admin password", type="password", key="admin_pwd_input")
     time.sleep(0.05)
 
-    if st.button("Submit", key="admin_submit_btn"):
-        ok = _verify_bcrypt(password_hash, pwd)
+    st.button(
+        "Submit",
+        key="admin_submit_btn",
+        disabled=is_page_action_busy(AUTH_PAGE_KEY),
+        on_click=queue_page_action,
+        args=(AUTH_PAGE_KEY, "submit_admin_login", {"password": pwd}),
+    )
+
+    action = consume_page_action(AUTH_PAGE_KEY, "submit_admin_login")
+    if action is not None:
+        clear_page_action(AUTH_PAGE_KEY)
+        pwd_to_check = str(action.get("password", ""))
+        ok = _verify_bcrypt(password_hash, pwd_to_check)
 
         if not ok:
             new_failed = int(failed_attempts or 0) + 1

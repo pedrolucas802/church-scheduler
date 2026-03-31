@@ -1,216 +1,238 @@
-import streamlit as st
+from datetime import datetime
+
 import pandas as pd
-from datetime import datetime, timedelta
-from collections import defaultdict
+import streamlit as st
 
-from src.db import (
-    list_reminders,
-    mark_reminder_sent,
-    list_schedule_between,
-    engine,
-    volunteers,
-    services,
-    assignments,
-    reminder_jobs,
-)
 from src.auth import is_admin
-from src.i18n import t, get_lang
-from src.emailer import send_email
-
-from sqlalchemy import select, update
-
-from src.reminders.runner import send_due_emails_deduped
+from src.db import list_reminders, mark_reminder_sent
+from src.i18n import get_lang, t
+from src.reminders.runner import (
+    now_in_fortaleza_naive,
+    role_label,
+    send_due_whatsapp_reminders,
+)
+from src.services.evolution_api_service import (
+    EvolutionAPIService,
+    prepend_whatsapp_test_banner,
+    resolve_whatsapp_destination_number,
+)
+from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 
 st.title(t("rem.title"))
 lang = get_lang()
-
-# =========================
-# Helpers
-# =========================
-
-def _format_time(dt: datetime) -> str:
-    return dt.strftime("%H:%M")
+PAGE_KEY = "reminders_page"
 
 
-# =========================
-# Query due reminders (join)
-# =========================
-def list_due_reminders_for_email(now: datetime | None = None):
-    """
-    PENDING reminders whose send_at_iso <= now, joined with service + volunteer info.
-    Returns rows:
-      (reminder_id, send_at_iso, service_dt_iso, role, volunteer_id, volunteer_name, volunteer_email, volunteer_phone)
-    """
-    now = now or datetime.utcnow()
-    now_iso = now.isoformat()
-
-    stmt = (
-        select(
-            reminder_jobs.c.id.label("reminder_id"),
-            reminder_jobs.c.send_at_iso,
-            services.c.dt_iso.label("service_dt_iso"),
-            assignments.c.role,
-            volunteers.c.id.label("volunteer_id"),
-            volunteers.c.name.label("volunteer_name"),
-            volunteers.c.email.label("volunteer_email"),
-            volunteers.c.phone.label("volunteer_phone"),
+def _single_reminder_message(service_dt: datetime, role: str, name: str) -> str:
+    if lang == "pt":
+        return (
+            f"Olá, {name}!\n\n"
+            "Lembrete da sua escala de transmissão:\n\n"
+            f"- {service_dt.strftime('%d/%m/%Y %H:%M')} — {role_label(role, lang)}\n\n"
+            "Se tiver algum impedimento, avise o quanto antes para tentarmos trocar."
         )
-        .select_from(
-            reminder_jobs
-            .join(assignments, assignments.c.id == reminder_jobs.c.assignment_id)
-            .join(services, services.c.id == assignments.c.service_id)
-            .join(volunteers, volunteers.c.id == assignments.c.volunteer_id)
-        )
-        .where(reminder_jobs.c.status == "PENDING")
-        .where(reminder_jobs.c.send_at_iso <= now_iso)
-        .order_by(services.c.dt_iso.asc())
+
+    return (
+        f"Hi {name}!\n\n"
+        "Reminder for your streaming schedule:\n\n"
+        f"- {service_dt.strftime('%Y-%m-%d %H:%M')} — {role_label(role, lang)}\n\n"
+        "If you can’t make it, please let us know as soon as possible so we can arrange a swap."
     )
 
-    with engine().connect() as conn:
-        return conn.execute(stmt).fetchall()
 
-
-def mark_reminders_sent(reminder_ids: list[int]):
-    if not reminder_ids:
-        return
-    with engine().begin() as conn:
-        conn.execute(
-            update(reminder_jobs)
-            .where(reminder_jobs.c.id.in_(reminder_ids))
-            .values(status="SENT", sent_at=datetime.utcnow().isoformat())
+def _friendly_send_error(error: str | None) -> str:
+    if not error:
+        return "Falha desconhecida." if lang == "pt" else "Unknown failure."
+    if error.startswith("instance_not_open:"):
+        state = error.split(":", 1)[1] or "unknown"
+        return (
+            f"O WhatsApp do Evolution não está conectado. Estado atual: {state}."
+            if lang == "pt"
+            else f"Evolution WhatsApp is not connected. Current state: {state}."
         )
+    if error == "invalid_number":
+        return "Número de WhatsApp inválido." if lang == "pt" else "Invalid WhatsApp number."
+    if error == "timeout":
+        return "A requisição ao Evolution expirou." if lang == "pt" else "Evolution request timed out."
+    return f"Falha ao enviar: {error}" if lang == "pt" else f"Failed to send: {error}"
 
 
-# =========================
-# Table / Filters (FIX: 9 vs 10 cols)
-# =========================
 status = st.selectbox(t("rem.filter"), ["PENDING", "SENT", "FAILED", "CANCELLED", "ALL"])
 rows = list_reminders(status=None if status == "ALL" else status)
 
-# Detect schema by row length
 cols_10 = ["id", "status", "send_at_iso", "attempts", "last_error", "service_dt", "role", "name", "email", "phone"]
-cols_9  = ["id", "status", "send_at_iso", "attempts", "last_error", "service_dt", "role", "name", "email"]
+cols_9 = ["id", "status", "send_at_iso", "attempts", "last_error", "service_dt", "role", "name", "email"]
 
 if rows:
     width = len(rows[0])
 else:
-    width = 10  # default
+    width = 10
 
 if width == 9:
     df = pd.DataFrame(rows, columns=cols_9)
 elif width == 10:
     df = pd.DataFrame(rows, columns=cols_10)
 else:
-    # fallback: create generic columns
     df = pd.DataFrame(rows)
     st.warning(
-        f"Schema inesperado em list_reminders(): {width} colunas. Ajuste a função ou este arquivo."
-        if lang == "pt" else
-        f"Unexpected schema from list_reminders(): {width} columns. Update the function or this file."
+        f"Schema inesperado em list_reminders(): {width} colunas. Ajuste a função ou esta página."
+        if lang == "pt"
+        else f"Unexpected schema from list_reminders(): {width} columns. Update the function or this page."
     )
 
 st.dataframe(df, use_container_width=True)
 st.caption(t("rem.admin_note"))
 
-# =========================
-# Non-admin stop
-# =========================
 if not is_admin():
     st.warning(t("common.admin_required"))
     st.stop()
 
-rem_by_id = {int(r[0]): r for r in rows}
+rem_by_id = {int(row[0]): row for row in rows}
 
-# =========================
-# Admin: Send ONE reminder email (single reminder id)
-# =========================
 st.divider()
-st.subheader("📧 " + ("Enviar lembrete por e-mail (1 reminder)" if lang == "pt" else "Send reminder by email (1 reminder)"))
+st.subheader(
+    "💬 "
+    + (
+        "Enviar lembrete por WhatsApp (1 reminder)"
+        if lang == "pt"
+        else "Send WhatsApp reminder (1 reminder)"
+    )
+)
 
 rid = st.number_input("Reminder ID", min_value=1, step=1)
-
-def single_reminder_subject(service_dt: datetime, role: str) -> str:
-    if lang == "pt":
-        return f"🚨 Lembrete de escala — {service_dt.strftime('%d/%m %H:%M')} ({role})"
-    return f"🚨 Schedule reminder — {service_dt.strftime('%b %d %H:%M')} ({role})"
-
-def single_reminder_body(service_dt: datetime, role: str, name: str, email: str | None, phone: str | None) -> str:
-    if lang == "pt":
-        return (
-            f"Olá, {name}!\n\n"
-            f"Lembrete da escala de transmissão:\n\n"
-            f"📅 Data/Hora: {service_dt.strftime('%d/%m/%Y %H:%M')}\n"
-            f"🎛️ Função: {role}\n"
-            f"📧 Email: {email or '—'}\n"
-            f"📞 Telefone: {phone or '—'}\n\n"
-            f"Obs: Este e-mail foi gerado manualmente pela aba de Reminders.\n"
-        )
-    return (
-        f"Hello, {name}!\n\n"
-        f"Streaming schedule reminder:\n\n"
-        f"📅 Date/Time: {service_dt.strftime('%b %d, %Y %H:%M')}\n"
-        f"🎛️ Role: {role}\n"
-        f"📧 Email: {email or '—'}\n"
-        f"📞 Phone: {phone or '—'}\n\n"
-        f"Note: This email was manually generated from the Reminders tab.\n"
-    )
 
 c1, c2 = st.columns(2)
 
 with c1:
-    if st.button("📨 " + ("Enviar e marcar como SENT" if lang == "pt" else "Send & mark as SENT")):
-        if int(rid) not in rem_by_id:
+    st.button(
+        "📲 " + ("Enviar e marcar como SENT" if lang == "pt" else "Send & mark as SENT"),
+        disabled=is_page_action_busy(PAGE_KEY),
+        on_click=queue_page_action,
+        args=(PAGE_KEY, "send_single_reminder", {"rid": int(rid)}),
+    )
+
+with c2:
+    st.button(
+        t("rem.simulate"),
+        disabled=is_page_action_busy(PAGE_KEY),
+        on_click=queue_page_action,
+        args=(PAGE_KEY, "simulate_single_reminder", {"rid": int(rid)}),
+    )
+
+single_send_action = consume_page_action(PAGE_KEY, "send_single_reminder")
+if single_send_action is not None:
+    try:
+        if int(single_send_action["rid"]) not in rem_by_id:
             st.toast("ID inválido para o filtro atual." if lang == "pt" else "Invalid ID for current filter.", icon="⚠️")
         else:
-            row = rem_by_id[int(rid)]
-            # row can be 9 or 10 cols
+            row = rem_by_id[int(single_send_action["rid"])]
             if len(row) == 9:
                 _id, _status, _send_at, _attempts, _err, _service_dt, _role, _name, _email = row
                 _phone = None
             else:
                 _id, _status, _send_at, _attempts, _err, _service_dt, _role, _name, _email, _phone = row
 
-            service_dt = datetime.fromisoformat(_service_dt)
-
-            if not _email:
-                st.toast("Sem e-mail cadastrado." if lang == "pt" else "No email set.", icon="⚠️")
+            if not _phone:
+                st.toast(
+                    "Sem número de WhatsApp cadastrado." if lang == "pt" else "No WhatsApp number set.",
+                    icon="⚠️",
+                )
             else:
-                try:
-                    subject = single_reminder_subject(service_dt, _role)
-                    body = single_reminder_body(service_dt, _role, _name, _email, _phone)
-                    send_email(subject, body, to_email=_email)
-                    mark_reminder_sent(int(rid))
-                    st.toast("Enviado ✅ e marcado como SENT." if lang == "pt" else "Sent ✅ and marked SENT.", icon="📧")
-                    st.rerun()
-                except Exception as e:
-                    st.toast(f"Falha ao enviar: {e}" if lang == "pt" else f"Failed: {e}", icon="❌")
+                service = EvolutionAPIService.from_env()
+                if service is None:
+                    missing = ", ".join(EvolutionAPIService.missing_env_vars())
+                    st.toast(
+                        (
+                            f"Configuração do Evolution incompleta: {missing}"
+                            if lang == "pt"
+                            else f"Evolution config is incomplete: {missing}"
+                        ),
+                        icon="⚠️",
+                    )
+                else:
+                    service_dt = datetime.fromisoformat(_service_dt)
+                    destination_number = resolve_whatsapp_destination_number(_phone)
+                    if not destination_number:
+                        st.toast(
+                            "Sem número de WhatsApp válido para envio."
+                            if lang == "pt"
+                            else "No valid WhatsApp number for delivery.",
+                            icon="⚠️",
+                        )
+                    else:
+                        with st.spinner("Enviando lembrete..." if lang == "pt" else "Sending reminder..."):
+                            response = service.send_text(
+                                number=destination_number,
+                                text=prepend_whatsapp_test_banner(
+                                    text=_single_reminder_message(service_dt=service_dt, role=_role, name=_name),
+                                    recipient_label=_name,
+                                    original_number=_phone,
+                                    lang=lang,
+                                ),
+                            )
+                        if response.success:
+                            mark_reminder_sent(int(single_send_action["rid"]))
+                            st.toast(
+                                "WhatsApp enviado ✅ e marcado como SENT."
+                                if lang == "pt"
+                                else "WhatsApp sent ✅ and marked SENT.",
+                                icon="📲",
+                            )
+                            st.rerun()
+                        else:
+                            st.toast(_friendly_send_error(response.error), icon="❌")
+    finally:
+        clear_page_action(PAGE_KEY)
 
-with c2:
-    if st.button(t("rem.simulate")):
-        mark_reminder_sent(int(rid))
+simulate_action = consume_page_action(PAGE_KEY, "simulate_single_reminder")
+if simulate_action is not None:
+    try:
+        mark_reminder_sent(int(simulate_action["rid"]))
         st.toast("OK ✅", icon="✅")
         st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
-# =========================
-# Admin: Send DUE reminders now (DEDUP per volunteer/day)
-# =========================
 st.divider()
-st.subheader("⏱️ " + ("Enviar lembretes vencidos (sem duplicar no mesmo dia)" if lang == "pt" else "Send due reminders (dedup same-day)"))
+st.subheader(
+    "⏱️ "
+    + (
+        "Enviar lembretes vencidos no WhatsApp (sem duplicar no mesmo dia)"
+        if lang == "pt"
+        else "Send due WhatsApp reminders (dedup same-day)"
+    )
+)
 
-if st.button("🚀 " + ("Enviar agora" if lang == "pt" else "Send now")):
+st.button(
+    "🚀 " + ("Enviar agora" if lang == "pt" else "Send now"),
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(PAGE_KEY, "send_due_reminders"),
+)
+
+send_due_action = consume_page_action(PAGE_KEY, "send_due_reminders")
+if send_due_action is not None:
     try:
-        result = send_due_emails_deduped(now=datetime.utcnow())
+        with st.spinner("Enviando lembretes..." if lang == "pt" else "Sending reminders..."):
+            result = send_due_whatsapp_reminders(now=now_in_fortaleza_naive(), lang=lang)
         st.toast(
             (
-                f"Enviado: {result['sent_emails']} | Marcados SENT: {result['marked_sent']} | Sem e-mail: {result['skipped_no_email']}"
+                f"WhatsApps enviados: {result['sent_messages']} | "
+                f"Marcados SENT: {result['marked_sent']} | "
+                f"Sem número: {result['skipped_no_phone']} | "
+                f"Falhas: {result['failed_messages']}"
             )
             if lang == "pt"
-            else
-            (
-                f"Sent: {result['sent_emails']} | Marked SENT: {result['marked_sent']} | No email: {result['skipped_no_email']}"
+            else (
+                f"WhatsApps sent: {result['sent_messages']} | "
+                f"Marked SENT: {result['marked_sent']} | "
+                f"No phone: {result['skipped_no_phone']} | "
+                f"Failures: {result['failed_messages']}"
             ),
-            icon="📨",
+            icon="📲",
         )
         st.rerun()
-    except Exception as e:
-        st.toast(f"Falha: {e}" if lang == "pt" else f"Failed: {e}", icon="❌")
+    except Exception as exc:
+        st.toast(f"Falha: {exc}" if lang == "pt" else f"Failed: {exc}", icon="❌")
+    finally:
+        clear_page_action(PAGE_KEY)

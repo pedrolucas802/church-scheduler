@@ -6,6 +6,7 @@ def nav_pages(admin_enabled: bool = False):
         ("src/pages/1_Volunteers.py", "nav.volunteers", "👥"),
         ("src/pages/2_Schedule.py", "nav.schedule", "📅"),
         ("src/pages/4_Edit.py", "nav.edit", "✏️"),
+        ("src/pages/6_checklist.py", "nav.checklist", "✅"),
     ]
 
     admin_only = [
