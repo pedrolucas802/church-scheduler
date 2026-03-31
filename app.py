@@ -16,7 +16,7 @@ from src.db import init_db
 from src.auth import admin_gate, is_admin
 from src.i18n import t, language_selector
 from src.nav import nav_pages
-from src.reminders.scheduler import start_scheduler
+from src.reminders.scheduler import apply_scheduler_setting
 
 # -----------------------
 # Helpers
@@ -32,15 +32,6 @@ def get_app_version() -> str:
     except Exception:
         return "dev"
 
-def start_scheduler_once():
-    """
-    Streamlit reruns the script a lot.
-    Ensure scheduler is started only once per process.
-    """
-    if not st.session_state.get("_scheduler_started", False):
-        start_scheduler()
-        st.session_state["_scheduler_started"] = True
-
 # -----------------------
 # Streamlit config + DB
 # -----------------------
@@ -51,8 +42,8 @@ st.set_page_config(
 
 init_db()
 
-# Start background scheduler (once)
-start_scheduler_once()
+# Sync background scheduler with persisted admin setting
+apply_scheduler_setting()
 
 # -----------------------
 # UI: language + sidebar
