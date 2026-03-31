@@ -17,11 +17,7 @@ from src.reminders.scheduler import (
     scheduler_running,
     set_scheduler_enabled,
 )
-from src.services.evolution_api_service import (
-    EvolutionAPIService,
-    prepend_whatsapp_test_banner,
-    resolve_whatsapp_destination_number,
-)
+from src.services.evolution_api_service import EvolutionAPIService, normalize_whatsapp_number
 from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 
 st.title(t("rem.title"))
@@ -261,7 +257,7 @@ if single_send_action is not None:
                     )
                 else:
                     service_dt = datetime.fromisoformat(_service_dt)
-                    destination_number = resolve_whatsapp_destination_number(_phone)
+                    destination_number = normalize_whatsapp_number(_phone)
                     if not destination_number:
                         st.toast(
                             "Sem número de WhatsApp válido para envio."
@@ -273,12 +269,7 @@ if single_send_action is not None:
                         with st.spinner("Enviando lembrete..." if lang == "pt" else "Sending reminder..."):
                             response = service.send_text(
                                 number=destination_number,
-                                text=prepend_whatsapp_test_banner(
-                                    text=_single_reminder_message(service_dt=service_dt, role=_role, name=_name),
-                                    recipient_label=_name,
-                                    original_number=_phone,
-                                    lang=lang,
-                                ),
+                                text=_single_reminder_message(service_dt=service_dt, role=_role, name=_name),
                             )
                         if response.success:
                             mark_reminder_sent(int(single_send_action["rid"]))

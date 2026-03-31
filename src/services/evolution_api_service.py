@@ -23,45 +23,6 @@ def normalize_whatsapp_number(raw: str | None) -> str | None:
     return digits or None
 
 
-def get_whatsapp_test_override_number(env_var: str = "REMINDER_TEST_WHATSAPP_NUMBER") -> str | None:
-    raw = (os.getenv(env_var) or "").strip()
-    return normalize_whatsapp_number(raw)
-
-
-def resolve_whatsapp_destination_number(
-    original_number: str | None,
-    env_var: str = "REMINDER_TEST_WHATSAPP_NUMBER",
-) -> str | None:
-    return get_whatsapp_test_override_number(env_var=env_var) or normalize_whatsapp_number(original_number)
-
-
-def prepend_whatsapp_test_banner(
-    text: str,
-    recipient_label: str,
-    original_number: str | None,
-    lang: str = "pt",
-    env_var: str = "REMINDER_TEST_WHATSAPP_NUMBER",
-) -> str:
-    override = get_whatsapp_test_override_number(env_var=env_var)
-    if not override:
-        return text
-
-    if lang == "pt":
-        header = (
-            "[TESTE INTERNO]\n"
-            f"Destino real: {recipient_label} ({original_number or 'sem numero'})\n"
-            f"Mensagem redirecionada para: {override}\n\n"
-        )
-    else:
-        header = (
-            "[INTERNAL TEST]\n"
-            f"Original destination: {recipient_label} ({original_number or 'no number'})\n"
-            f"Message rerouted to: {override}\n\n"
-        )
-
-    return header + text
-
-
 @dataclass(frozen=True)
 class EvolutionAPIResponse:
     success: bool

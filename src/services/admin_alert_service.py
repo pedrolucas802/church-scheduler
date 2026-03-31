@@ -7,8 +7,6 @@ from datetime import datetime
 from src.services.evolution_api_service import (
     EvolutionAPIService,
     normalize_whatsapp_number,
-    prepend_whatsapp_test_banner,
-    resolve_whatsapp_destination_number,
 )
 
 ROLE_PT = {"OBS": "OBS", "FIXED": "CÂMERA FIXA", "MOBILE": "CÂMERA MÓVEL"}
@@ -113,19 +111,14 @@ def send_pending_edit_alert(
     )
 
     for recipient in recipients:
-        destination_number = resolve_whatsapp_destination_number(recipient)
+        destination_number = normalize_whatsapp_number(recipient)
         if not destination_number:
             failed_messages += 1
             continue
 
         response = service.send_text(
             number=destination_number,
-            text=prepend_whatsapp_test_banner(
-                text=text,
-                recipient_label=f"admin {recipient}",
-                original_number=recipient,
-                lang=lang,
-            ),
+            text=text,
         )
         if response.success:
             sent_messages += 1
