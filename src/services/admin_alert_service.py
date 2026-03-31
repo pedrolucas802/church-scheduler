@@ -7,8 +7,6 @@ from datetime import datetime
 from src.services.evolution_api_service import (
     EvolutionAPIService,
     normalize_whatsapp_number,
-    prepend_whatsapp_test_banner,
-    resolve_whatsapp_destination_number,
 )
 
 ROLE_PT = {"OBS": "OBS", "FIXED": "CÂMERA FIXA", "MOBILE": "CÂMERA MÓVEL"}
@@ -56,21 +54,23 @@ def build_pending_edit_alert_text(
 ) -> str:
     if lang == "pt":
         return (
-            "Alerta de admin: ha um pedido pendente de alteracao na escala.\n\n"
+            "Olá! Chegou um novo pedido de alteração na escala.\n\n"
+            "Resumo para revisão:\n"
             f"Culto: {pretty_dt(service_dt, lang)}\n"
-            f"Funcao: {role_label(role, lang)}\n"
-            f"Atual: {current_volunteer}\n"
+            f"Função: {role_label(role, lang)}\n"
+            f"Escalado atual: {current_volunteer}\n"
             f"Solicitante: {requester}\n"
             f"Substituto sugerido: {replacement}\n"
             f"Motivo: {reason or '—'}\n\n"
-            "Abra a pagina Editar / Trocas para aprovar ou rejeitar."
+            "Abra a página Editar / Trocas para aprovar ou rejeitar."
         )
 
     return (
-        "Admin alert: there is a pending schedule edit request.\n\n"
+        "Hello. A new schedule change request has come in.\n\n"
+        "Review summary:\n"
         f"Service: {pretty_dt(service_dt, lang)}\n"
         f"Role: {role_label(role, lang)}\n"
-        f"Current: {current_volunteer}\n"
+        f"Currently assigned: {current_volunteer}\n"
         f"Requester: {requester}\n"
         f"Suggested replacement: {replacement}\n"
         f"Reason: {reason or '—'}\n\n"
@@ -113,19 +113,14 @@ def send_pending_edit_alert(
     )
 
     for recipient in recipients:
-        destination_number = resolve_whatsapp_destination_number(recipient)
+        destination_number = normalize_whatsapp_number(recipient)
         if not destination_number:
             failed_messages += 1
             continue
 
         response = service.send_text(
             number=destination_number,
-            text=prepend_whatsapp_test_banner(
-                text=text,
-                recipient_label=f"admin {recipient}",
-                original_number=recipient,
-                lang=lang,
-            ),
+            text=text,
         )
         if response.success:
             sent_messages += 1

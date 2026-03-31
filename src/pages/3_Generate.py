@@ -13,7 +13,6 @@ from src.db import (
     rebuild_reminders_for_month,
 )
 from src.scheduler import month_services, generate_assignments
-from src.services.evolution_api_service import get_whatsapp_test_override_number
 from src.services.monthly_schedule_service import send_month_schedule_alerts
 from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 from src.i18n import t, get_lang
@@ -143,15 +142,6 @@ st.info(
         "Special rule: **Sunday 15:00** needs **OBS only** (no fixed/mobile camera).",
     )
 )
-
-test_override = get_whatsapp_test_override_number()
-if test_override:
-    st.info(
-        _label(
-            f"Modo teste ativo: os envios de WhatsApp serao redirecionados para {test_override}.",
-            f"Test mode is active: WhatsApp sends will be rerouted to {test_override}.",
-        )
-    )
 
 action_col1, action_col2 = st.columns(2)
 with action_col1:

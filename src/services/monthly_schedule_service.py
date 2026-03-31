@@ -5,8 +5,7 @@ from datetime import datetime
 from src.db import get_assignments_for_service, list_services_in_month, list_volunteers
 from src.services.evolution_api_service import (
     EvolutionAPIService,
-    prepend_whatsapp_test_banner,
-    resolve_whatsapp_destination_number,
+    normalize_whatsapp_number,
 )
 
 ROLE_PT = {"OBS": "OBS", "FIXED": "CÂMERA FIXA", "MOBILE": "CÂMERA MÓVEL"}
@@ -111,16 +110,20 @@ def build_month_schedule_whatsapp_text(
     if lang == "pt":
         return (
             f"Olá, {vol_name}!\n\n"
-            f"Sua escala de transmissão de {month_year_label(year, month, lang)} ficou assim:\n\n"
+            f"Segue sua escala de transmissão de {month_year_label(year, month, lang)}.\n\n"
+            "Confira os cultos e horários abaixo:\n\n"
             f"{lines}\n\n"
-            "Se tiver algum impedimento, avise o quanto antes para tentarmos ajustar."
+            "Se perceber qualquer conflito ou imprevisto, avise o quanto antes para conseguirmos ajustar.\n\n"
+            "Obrigado por servir."
         )
 
     return (
         f"Hi {vol_name}!\n\n"
-        f"Your streaming schedule for {month_year_label(year, month, lang)} is:\n\n"
+        f"Here is your streaming schedule for {month_year_label(year, month, lang)}.\n\n"
+        "Please check the services and times below:\n\n"
         f"{lines}\n\n"
-        "If you have any conflict, please let us know as soon as possible so we can adjust it."
+        "If you notice any conflict or issue, please let us know as soon as possible so we can adjust it.\n\n"
+        "Thanks for serving."
     )
 
 
@@ -144,23 +147,18 @@ def send_month_schedule_alerts(year: int, month: int, lang: str = "pt"):
     failed_messages = 0
 
     for recipient in recipients:
-        destination_number = resolve_whatsapp_destination_number(recipient["phone"])
+        destination_number = normalize_whatsapp_number(recipient["phone"])
         if not destination_number:
             skipped_no_phone += 1
             continue
 
         response = service.send_text(
             number=destination_number,
-            text=prepend_whatsapp_test_banner(
-                text=build_month_schedule_whatsapp_text(
-                    vol_name=recipient["volunteer_name"],
-                    year=year,
-                    month=month,
-                    items=recipient["items"],
-                    lang=lang,
-                ),
-                recipient_label=recipient["volunteer_name"],
-                original_number=recipient["phone"],
+            text=build_month_schedule_whatsapp_text(
+                vol_name=recipient["volunteer_name"],
+                year=year,
+                month=month,
+                items=recipient["items"],
                 lang=lang,
             ),
         )

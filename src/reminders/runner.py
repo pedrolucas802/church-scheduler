@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -15,40 +14,6 @@ ROLE_EN = {"OBS": "OBS", "FIXED": "FIXED CAMERA", "MOBILE": "MOBILE CAMERA"}
 
 def now_in_fortaleza_naive() -> datetime:
     return datetime.now(FORTALEZA_TZ).replace(tzinfo=None)
-
-
-def reminder_test_override_number() -> str | None:
-    raw = (os.getenv("REMINDER_TEST_WHATSAPP_NUMBER") or "").strip()
-    return normalize_whatsapp_number(raw)
-
-
-def resolve_reminder_destination_number(original_number: str | None) -> str | None:
-    return reminder_test_override_number() or normalize_whatsapp_number(original_number)
-
-
-def apply_test_reroute_banner(
-    text: str,
-    volunteer_name: str,
-    original_number: str | None,
-    lang: str = "pt",
-) -> str:
-    override = reminder_test_override_number()
-    if not override:
-        return text
-
-    if lang == "pt":
-        header = (
-            f"Destino: {volunteer_name} ({original_number or 'sem número'})\n"
-            f"Mensagem redirecionada para: {override}\n\n"
-        )
-    else:
-        header = (
-            "[INTERNAL TEST]\n"
-            f"Volunteer original destination: {volunteer_name} ({original_number or 'no number'})\n"
-            f"Message rerouted to: {override}\n\n"
-        )
-
-    return header + text
 
 
 def run_reminders_job():
@@ -124,20 +89,15 @@ def send_due_whatsapp_reminders(now: datetime | None = None, lang: str = "pt"):
     failed_messages = 0
 
     for bucket in buckets.values():
-        destination_number = resolve_reminder_destination_number(bucket["volunteer_phone"])
+        destination_number = normalize_whatsapp_number(bucket["volunteer_phone"])
         if not destination_number:
             skipped_no_phone += 1
             continue
 
-        text = apply_test_reroute_banner(
-            text=build_reminder_whatsapp_text(
-                vol_name=bucket["volunteer_name"],
-                day=bucket["day_dt"],
-                items=bucket["items"],
-                lang=lang,
-            ),
-            volunteer_name=bucket["volunteer_name"],
-            original_number=bucket["volunteer_phone"],
+        text = build_reminder_whatsapp_text(
+            vol_name=bucket["volunteer_name"],
+            day=bucket["day_dt"],
+            items=bucket["items"],
             lang=lang,
         )
         response = service.send_text(number=destination_number, text=text)
@@ -146,7 +106,7 @@ def send_due_whatsapp_reminders(now: datetime | None = None, lang: str = "pt"):
             print(
                 "[REMINDERS][WARN] Failed WhatsApp send "
                 f"to {bucket['volunteer_name']} "
-                f"(original {bucket['volunteer_phone']}, actual {destination_number}): {response.error}"
+                f"({destination_number}): {response.error}"
             )
             continue
 
@@ -172,16 +132,22 @@ def build_reminder_whatsapp_text(vol_name: str, day: datetime, items: list[dict]
     if lang == "pt":
         return (
             f"Olá, {vol_name}!\n\n"
-            f"Lembrete da sua escala de transmissão para amanhã ({day.strftime('%d/%m/%Y')}):\n\n"
+            "Passando para lembrar da sua escala de transmissão.\n\n"
+            f"Data: {day.strftime('%d/%m/%Y')}\n"
+            "Você está escalado nestes horários:\n\n"
             f"{lines}\n\n"
-            "Se tiver algum impedimento, avise o quanto antes para tentarmos trocar."
+            "Se surgir qualquer imprevisto, avise o quanto antes para conseguirmos ajustar.\n\n"
+            "Obrigado por servir."
         )
 
     return (
         f"Hi {vol_name}!\n\n"
-        f"Reminder for your streaming schedule tomorrow ({day.strftime('%Y-%m-%d')}):\n\n"
+        "Just a quick reminder about your streaming schedule.\n\n"
+        f"Date: {day.strftime('%Y-%m-%d')}\n"
+        "You are scheduled for:\n\n"
         f"{lines}\n\n"
-        "If you can’t make it, please let us know as soon as possible so we can arrange a swap."
+        "If anything comes up, please let us know as soon as possible so we can adjust it.\n\n"
+        "Thanks for serving."
     )
 
 
