@@ -3,5 +3,9 @@
 
 .env
 **/.env
+.env.local
+.prod-local.env
+dev/evolution-local/.env
+evolution-qr.png
 
 church-scheduler.iml

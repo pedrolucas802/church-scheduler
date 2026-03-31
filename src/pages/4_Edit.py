@@ -16,9 +16,11 @@ from src.db import (
     rebuild_reminders_for_month,
 )
 from src.i18n import t, get_lang
-from src.emailer import send_email
+from src.services.admin_alert_service import send_pending_edit_alert
+from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 
 lang = get_lang()
+PAGE_KEY = "edit_page"
 st.title(t("edit.title") if t("edit.title") != "edit.title" else ("Editar / Trocas" if lang == "pt" else "Edit / Swaps"))
 
 # ======================
@@ -136,50 +138,73 @@ else:
         placeholder=("Ex: viagem" if lang == "pt" else "e.g., travel"),
     )
 
-    if st.button("📨 " + ("Enviar pedido" if lang == "pt" else "Submit request")):
-        if requester == replacement:
+    st.button(
+        "📨 " + ("Enviar pedido" if lang == "pt" else "Submit request"),
+        disabled=is_page_action_busy(PAGE_KEY),
+        on_click=queue_page_action,
+        args=(
+            PAGE_KEY,
+            "submit_swap_request",
+            {
+                "assignment_id": int(assignment_id),
+                "requester": requester,
+                "replacement": replacement,
+                "requester_id": int(vol_by_name[requester]),
+                "replacement_id": int(vol_by_name[replacement]),
+                "reason": reason.strip(),
+                "dt_iso": dt.isoformat(),
+                "role": picked_role,
+                "current_volunteer": current_volunteer,
+            },
+        ),
+    )
+
+swap_request_action = consume_page_action(PAGE_KEY, "submit_swap_request")
+if swap_request_action is not None:
+    try:
+        if swap_request_action["requester"] == swap_request_action["replacement"]:
             st.error("Solicitante e substituto não podem ser a mesma pessoa." if lang == "pt" else "Requester and replacement cannot be the same.")
         else:
-            create_swap_request(
-                assignment_id=assignment_id,
-                requested_by_volunteer_id=vol_by_name[requester],
-                replacement_volunteer_id=vol_by_name[replacement],
-                reason=reason.strip(),
-            )
+            with st.spinner("Enviando pedido..." if lang == "pt" else "Submitting request..."):
+                create_swap_request(
+                    assignment_id=int(swap_request_action["assignment_id"]),
+                    requested_by_volunteer_id=int(swap_request_action["requester_id"]),
+                    replacement_volunteer_id=int(swap_request_action["replacement_id"]),
+                    reason=str(swap_request_action["reason"]),
+                )
 
-            subject = (
-                f"🔁 Pedido de troca — {dt.strftime('%d/%m %H:%M')}"
-                if lang == "pt"
-                else f"🔁 Swap request — {dt.strftime('%b %d %H:%M')}"
-            )
-
-            body = (
-                f"""Novo pedido de troca:
-
-📅 Culto: {dt.strftime('%d/%m/%Y %H:%M')}
-🎛️ Função: {role_label(picked_role)}
-👤 Atual: {current_volunteer}
-🙋 Solicitante: {requester}
-✅ Substituto: {replacement}
-📝 Motivo: {reason or '—'}
-"""
-                if lang == "pt"
-                else f"""New swap request:
-
-📅 Service: {dt.strftime('%b %d, %Y %H:%M')}
-🎛️ Role: {role_label(picked_role)}
-👤 Current: {current_volunteer}
-🙋 Requester: {requester}
-✅ Replacement: {replacement}
-📝 Reason: {reason or '—'}
-"""
-            )
-
-            try:
-                send_email(subject, body, to_email="plsb802@gmail.com")
+                alert_result = send_pending_edit_alert(
+                    service_dt=datetime.fromisoformat(str(swap_request_action["dt_iso"])),
+                    role=str(swap_request_action["role"]),
+                    current_volunteer=str(swap_request_action["current_volunteer"]),
+                    requester=str(swap_request_action["requester"]),
+                    replacement=str(swap_request_action["replacement"]),
+                    reason=str(swap_request_action["reason"]),
+                    lang=lang,
+                )
+            if alert_result["total_recipients"] == 0:
+                toast_warn(
+                    "Pedido criado, mas nenhum numero de admin foi configurado para alerta."
+                    if lang == "pt"
+                    else "Request created, but no admin alert numbers are configured yet."
+                )
+            elif alert_result["failed_messages"] > 0:
+                toast_warn(
+                    (
+                        f"Pedido criado, mas {alert_result['failed_messages']} alerta(s) falharam."
+                        if lang == "pt"
+                        else f"Request created, but {alert_result['failed_messages']} alert(s) failed."
+                    )
+                )
+            else:
                 toast_ok("Pedido enviado ✅" if lang == "pt" else "Request sent ✅")
-            except Exception as e:
-                toast_warn(("Pedido criado, mas falhou o e-mail: " if lang == "pt" else "Request created, but email failed: ") + str(e))
+    except Exception as e:
+        toast_warn(
+            ("Pedido criado, mas falhou o alerta no WhatsApp: " if lang == "pt" else "Request created, but the WhatsApp alert failed: ")
+            + str(e)
+        )
+    finally:
+        clear_page_action(PAGE_KEY)
 
 # ======================
 # STOP for non-admins
@@ -232,30 +257,55 @@ else:
 
     cA, cB = st.columns(2)
     with cA:
-        if st.button("✅ " + ("Aprovar" if lang == "pt" else "Approve"), use_container_width=True):
-            row = next((r for r in req_rows if int(r[0]) == int(req_id)), None)
-            if not row:
-                st.error("Request ID inválido." if lang == "pt" else "Invalid request ID.")
-            else:
-                _req_id, _status, _reason, _created_at, assignment_id, role, dt_iso, assigned_to, requested_by, replacement_id, replacement_name = row
-                if not replacement_id:
-                    st.error("Pedido não tem substituto definido." if lang == "pt" else "Request has no replacement.")
-                else:
-                    # apply replacement to assignment
-                    set_assignment_volunteer_by_id(int(assignment_id), int(replacement_id))
-                    resolve_swap_request(int(req_id), status="APPROVED", resolved_by_admin="admin")
-                    toast_ok("Aprovado e aplicado ✅" if lang == "pt" else "Approved and applied ✅")
-                    st.rerun()
+        st.button(
+            "✅ " + ("Aprovar" if lang == "pt" else "Approve"),
+            use_container_width=True,
+            disabled=is_page_action_busy(PAGE_KEY),
+            on_click=queue_page_action,
+            args=(PAGE_KEY, "approve_swap_request", {"req_id": int(req_id)}),
+        )
 
     with cB:
-        if st.button("❌ " + ("Rejeitar" if lang == "pt" else "Reject"), use_container_width=True):
-            row = next((r for r in req_rows if int(r[0]) == int(req_id)), None)
-            if not row:
-                st.error("Request ID inválido." if lang == "pt" else "Invalid request ID.")
+        st.button(
+            "❌ " + ("Rejeitar" if lang == "pt" else "Reject"),
+            use_container_width=True,
+            disabled=is_page_action_busy(PAGE_KEY),
+            on_click=queue_page_action,
+            args=(PAGE_KEY, "reject_swap_request", {"req_id": int(req_id)}),
+        )
+
+approve_action = consume_page_action(PAGE_KEY, "approve_swap_request")
+if approve_action is not None:
+    try:
+        row = next((r for r in req_rows if int(r[0]) == int(approve_action["req_id"])), None)
+        if not row:
+            st.error("Request ID inválido." if lang == "pt" else "Invalid request ID.")
+        else:
+            _req_id, _status, _reason, _created_at, assignment_id, role, dt_iso, assigned_to, requested_by, replacement_id, replacement_name = row
+            if not replacement_id:
+                st.error("Pedido não tem substituto definido." if lang == "pt" else "Request has no replacement.")
             else:
-                resolve_swap_request(int(req_id), status="REJECTED", resolved_by_admin="admin")
-                toast_ok("Rejeitado ❌" if lang == "pt" else "Rejected ❌")
+                with st.spinner("Aprovando..." if lang == "pt" else "Approving..."):
+                    set_assignment_volunteer_by_id(int(assignment_id), int(replacement_id))
+                    resolve_swap_request(int(approve_action["req_id"]), status="APPROVED", resolved_by_admin="admin")
+                toast_ok("Aprovado e aplicado ✅" if lang == "pt" else "Approved and applied ✅")
                 st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
+
+reject_action = consume_page_action(PAGE_KEY, "reject_swap_request")
+if reject_action is not None:
+    try:
+        row = next((r for r in req_rows if int(r[0]) == int(reject_action["req_id"])), None)
+        if not row:
+            st.error("Request ID inválido." if lang == "pt" else "Invalid request ID.")
+        else:
+            with st.spinner("Rejeitando..." if lang == "pt" else "Rejecting..."):
+                resolve_swap_request(int(reject_action["req_id"]), status="REJECTED", resolved_by_admin="admin")
+            toast_ok("Rejeitado ❌" if lang == "pt" else "Rejected ❌")
+            st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
 # ----------------------
 # Admin: Edit a service slot (manual assignment change)
@@ -292,10 +342,22 @@ if details:
 new_name = st.selectbox(("Novo voluntário" if lang == "pt" else "New volunteer"), ["—"] + vol_names)
 new_vid = None if new_name == "—" else vol_by_name[new_name]
 
-if st.button("💾 " + ("Salvar alteração" if lang == "pt" else "Save change")):
-    set_assignment_volunteer_by_id(int(aid), new_vid)
-    toast_ok("Atualizado ✅" if lang == "pt" else "Updated ✅")
-    st.rerun()
+st.button(
+    "💾 " + ("Salvar alteração" if lang == "pt" else "Save change"),
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(PAGE_KEY, "save_assignment_change", {"assignment_id": int(aid), "new_vid": new_vid}),
+)
+
+save_assignment_action = consume_page_action(PAGE_KEY, "save_assignment_change")
+if save_assignment_action is not None:
+    try:
+        with st.spinner("Salvando alteração..." if lang == "pt" else "Saving change..."):
+            set_assignment_volunteer_by_id(int(save_assignment_action["assignment_id"]), save_assignment_action["new_vid"])
+        toast_ok("Atualizado ✅" if lang == "pt" else "Updated ✅")
+        st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
 # ----------------------
 # Admin: Rebuild reminders for a month
@@ -310,6 +372,19 @@ with col1:
 with col2:
     month = st.number_input("Month", min_value=1, max_value=12, value=now.month, step=1)
 
-if st.button("🔁 " + ("Recriar reminders do mês" if lang == "pt" else "Rebuild month reminders")):
-    rebuild_reminders_for_month(int(year), int(month))
-    toast_ok("Reminders recriados ✅" if lang == "pt" else "Reminders rebuilt ✅")
+st.button(
+    "🔁 " + ("Recriar reminders do mês" if lang == "pt" else "Rebuild month reminders"),
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(PAGE_KEY, "rebuild_month_reminders", {"year": int(year), "month": int(month)}),
+)
+
+rebuild_action = consume_page_action(PAGE_KEY, "rebuild_month_reminders")
+if rebuild_action is not None:
+    try:
+        with st.spinner("Recriando reminders..." if lang == "pt" else "Rebuilding reminders..."):
+            rebuild_reminders_for_month(int(rebuild_action["year"]), int(rebuild_action["month"]))
+        toast_ok("Reminders recriados ✅" if lang == "pt" else "Reminders rebuilt ✅")
+        st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)

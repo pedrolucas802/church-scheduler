@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: church_db
+    restart: unless-stopped
+    env_file:
+      - ./.prod-local.env
+    volumes:
+      - pgdata_church:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U church_admin -d church_scheduler"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    image: ${EVOLUTION_DOCKER_IMAGE:-evoapicloud/evolution-api:v2.3.6}
+    container_name: evolution_api
+    restart: unless-stopped
+    env_file:
+      - ./.prod-local.env
+    environment:
+      TZ: America/Fortaleza
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?set EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      LANGUAGE: en
+      LOG_LEVEL: ERROR,WARN,INFO,LOG
+      LOG_COLOR: "true"
+      LOG_BAILEYS: error
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: ${EVOLUTION_DATABASE_CONNECTION_URI:?set EVOLUTION_DATABASE_CONNECTION_URI}
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_local
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CONFIG_SESSION_PHONE_CLIENT: Church Scheduler
+      QRCODE_LIMIT: 30
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - evolution_store:/evolution/store
+      - evolution_instances:/evolution/instances
+
+  app:
+    build: .
+    container_name: church_app
+    restart: unless-stopped
+    env_file:
+      - ./.prod-local.env
+    environment:
+      TZ: America/Fortaleza
+      EVOLUTION_API_BASE_URL: http://evolution-api:8080
+    depends_on:
+      db:
+        condition: service_healthy
+      evolution-api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8501:8501"
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0
+      --server.port=8501
+      --server.headless=true
+
+volumes:
+  pgdata_church:
+  evolution_store:
+  evolution_instances:

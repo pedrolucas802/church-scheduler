@@ -7,9 +7,11 @@ from src.db import list_volunteers, upsert_volunteer, set_volunteer_active
 from src.auth import is_admin
 from src.i18n import t, get_lang
 from src.emailer import send_email  # send pending + approved emails
+from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 
 st.title(t("vol.title"))
 lang = get_lang()
+PAGE_KEY = "volunteers_page"
 
 # ======================================================
 # Option 1 (Invite link): only people with ?invite=CODE
@@ -281,47 +283,78 @@ if not admin:
 
             b1, b2 = st.columns(2)
             with b1:
-                submitted = st.form_submit_button(t("vol.public.submit"), use_container_width=True)
+                st.form_submit_button(
+                    t("vol.public.submit"),
+                    use_container_width=True,
+                    disabled=is_page_action_busy(PAGE_KEY),
+                    on_click=queue_page_action,
+                    args=(
+                        PAGE_KEY,
+                        "public_submit",
+                        {
+                            "name": name,
+                            "email": email,
+                            "phone": phone,
+                            "thu_ok": bool(thu_ok),
+                            "sun_ok": bool(sun_ok),
+                            "can_obs": bool(can_obs),
+                            "can_fixed": bool(can_fixed),
+                            "can_mobile": bool(can_mobile),
+                        },
+                    ),
+                )
             with b2:
-                cleared = st.form_submit_button("🧹 Limpar" if lang == "pt" else "🧹 Clear", use_container_width=True)
+                cleared = st.form_submit_button(
+                    "🧹 Limpar" if lang == "pt" else "🧹 Clear",
+                    use_container_width=True,
+                    disabled=is_page_action_busy(PAGE_KEY),
+                )
 
         if cleared:
             toast_info("Formulário limpo." if lang == "pt" else "Form cleared.")
             bump("pub_form_ver")
             st.rerun()
 
-        if submitted:
-            toast_info("Enviando..." if lang == "pt" else "Submitting...")
-            if not name:
-                toast_err(t("common.name_required"))
-                st.error(t("common.name_required"))
-            elif not is_valid_email(email):
-                toast_err(t("common.invalid_email"))
-                st.error(t("common.invalid_email"))
-            else:
-                upsert_volunteer({
-                    "name": name,
-                    "email": email,
-                    "phone": normalize_phone(phone) if phone else None,
-                    "active": 0,  # pending approval
-                    "thu_ok": 1 if thu_ok else 0,
-                    "sun_ok": 1 if sun_ok else 0,
-                    "can_obs": 1 if can_obs else 0,
-                    "can_fixed": 1 if can_fixed else 0,
-                    "can_mobile": 1 if can_mobile else 0,
-                })
-                toast_ok("Cadastro salvo (pendente)." if lang == "pt" else "Saved (pending).")
-
-                ok, msg = send_pending_email(email, name)
-                if ok:
-                    toast_ok("E-mail enviado (aguardando aprovação)." if lang == "pt" else "Pending email sent.")
+        public_submit_action = consume_page_action(PAGE_KEY, "public_submit")
+        if public_submit_action is not None:
+            try:
+                toast_info("Enviando..." if lang == "pt" else "Submitting...")
+                action_name = str(public_submit_action.get("name", "")).strip()
+                action_email = str(public_submit_action.get("email", "")).strip()
+                action_phone = str(public_submit_action.get("phone", "")).strip()
+                if not action_name:
+                    toast_err(t("common.name_required"))
+                    st.error(t("common.name_required"))
+                elif not is_valid_email(action_email):
+                    toast_err(t("common.invalid_email"))
+                    st.error(t("common.invalid_email"))
                 else:
-                    toast_warn(("Cadastro salvo, mas falhou ao enviar e-mail: " if lang == "pt" else "Saved, but failed to send email: ") + msg)
-                    st.warning(("Cadastro salvo, mas falhou ao enviar e-mail: " if lang == "pt" else "Saved, but failed to send email: ") + msg)
+                    with st.spinner("Enviando cadastro..." if lang == "pt" else "Submitting registration..."):
+                        upsert_volunteer({
+                            "name": action_name,
+                            "email": action_email,
+                            "phone": normalize_phone(action_phone) if action_phone else None,
+                            "active": 0,
+                            "thu_ok": 1 if public_submit_action.get("thu_ok") else 0,
+                            "sun_ok": 1 if public_submit_action.get("sun_ok") else 0,
+                            "can_obs": 1 if public_submit_action.get("can_obs") else 0,
+                            "can_fixed": 1 if public_submit_action.get("can_fixed") else 0,
+                            "can_mobile": 1 if public_submit_action.get("can_mobile") else 0,
+                        })
+                        toast_ok("Cadastro salvo (pendente)." if lang == "pt" else "Saved (pending).")
 
-                st.success(t("vol.public.submitted_ok"))
-                bump("pub_form_ver")
-                st.rerun()
+                        ok, msg = send_pending_email(action_email, action_name)
+                    if ok:
+                        toast_ok("E-mail enviado (aguardando aprovação)." if lang == "pt" else "Pending email sent.")
+                    else:
+                        toast_warn(("Cadastro salvo, mas falhou ao enviar e-mail: " if lang == "pt" else "Saved, but failed to send email: ") + msg)
+                        st.warning(("Cadastro salvo, mas falhou ao enviar e-mail: " if lang == "pt" else "Saved, but failed to send email: ") + msg)
+
+                    st.success(t("vol.public.submitted_ok"))
+                    bump("pub_form_ver")
+                    st.rerun()
+            finally:
+                clear_page_action(PAGE_KEY)
 
     st.divider()
     st.subheader(t("vol.public.list_title"))
@@ -354,7 +387,10 @@ if not admin:
         inplace=True,
     )
 
-    if st.button("🔄 Recarregar" if lang == "pt" else "🔄 Refresh"):
+    if st.button(
+        "🔄 Recarregar" if lang == "pt" else "🔄 Refresh",
+        disabled=is_page_action_busy(PAGE_KEY),
+    ):
         toast_info("Atualizando..." if lang == "pt" else "Refreshing...")
         st.rerun()
 
@@ -394,7 +430,11 @@ top_left, top_right = st.columns([3, 1])
 with top_left:
     st.caption(t("vol.admin.caption"))
 with top_right:
-    if st.button("🔄 Recarregar" if lang == "pt" else "🔄 Refresh", use_container_width=True):
+    if st.button(
+        "🔄 Recarregar" if lang == "pt" else "🔄 Refresh",
+        use_container_width=True,
+        disabled=is_page_action_busy(PAGE_KEY),
+    ):
         toast_info("Atualizando..." if lang == "pt" else "Refreshing...")
         st.rerun()
 
@@ -419,30 +459,53 @@ with c2:
     default_can_fixed = st.checkbox(t("vol.can_fixed"), value=True, key="bulk_can_fixed")
     default_can_mobile = st.checkbox(t("vol.can_mobile"), value=True, key="bulk_can_mobile")
 
-if st.button(t("vol.bulk.import_btn")):
-    toast_info("Importando..." if lang == "pt" else "Importing...")
-    items = parse_bulk_list(bulk_text)
-    if not items:
-        toast_err(t("vol.bulk.nothing"))
-        st.error(t("vol.bulk.nothing"))
-    else:
-        imported = 0
-        for name, phone in items:
-            upsert_volunteer({
-                "name": name,
-                "phone": phone,
-                "active": 1,
-                "thu_ok": 1 if default_thu_ok else 0,
-                "sun_ok": 1 if default_sun_ok else 0,
-                "can_obs": 1 if default_can_obs else 0,
-                "can_fixed": 1 if default_can_fixed else 0,
-                "can_mobile": 1 if default_can_mobile else 0,
-            })
-            imported += 1
+st.button(
+    t("vol.bulk.import_btn"),
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(
+        PAGE_KEY,
+        "bulk_import",
+        {
+            "bulk_text": bulk_text,
+            "default_thu_ok": bool(default_thu_ok),
+            "default_sun_ok": bool(default_sun_ok),
+            "default_can_obs": bool(default_can_obs),
+            "default_can_fixed": bool(default_can_fixed),
+            "default_can_mobile": bool(default_can_mobile),
+        },
+    ),
+)
 
-        toast_ok((f"Importados: {imported}." if lang == "pt" else f"Imported: {imported}."))
-        st.success(f"{t('vol.bulk.done_en')}: {imported}. {t('common.refresh')}")
-        st.rerun()
+bulk_import_action = consume_page_action(PAGE_KEY, "bulk_import")
+if bulk_import_action is not None:
+    try:
+        toast_info("Importando..." if lang == "pt" else "Importing...")
+        items = parse_bulk_list(str(bulk_import_action.get("bulk_text", "")))
+        if not items:
+            toast_err(t("vol.bulk.nothing"))
+            st.error(t("vol.bulk.nothing"))
+        else:
+            imported = 0
+            with st.spinner("Importando..." if lang == "pt" else "Importing..."):
+                for name, phone in items:
+                    upsert_volunteer({
+                        "name": name,
+                        "phone": phone,
+                        "active": 1,
+                        "thu_ok": 1 if bulk_import_action.get("default_thu_ok") else 0,
+                        "sun_ok": 1 if bulk_import_action.get("default_sun_ok") else 0,
+                        "can_obs": 1 if bulk_import_action.get("default_can_obs") else 0,
+                        "can_fixed": 1 if bulk_import_action.get("default_can_fixed") else 0,
+                        "can_mobile": 1 if bulk_import_action.get("default_can_mobile") else 0,
+                    })
+                    imported += 1
+
+            toast_ok((f"Importados: {imported}." if lang == "pt" else f"Imported: {imported}."))
+            st.success(f"{t('vol.bulk.done_en')}: {imported}. {t('common.refresh')}")
+            st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
 st.divider()
 
@@ -469,138 +532,179 @@ with st.form(adm_form_key, clear_on_submit=False):
 
     b1, b2 = st.columns(2)
     with b1:
-        submit = st.form_submit_button(t("common.save"), use_container_width=True)
+        st.form_submit_button(
+            t("common.save"),
+            use_container_width=True,
+            disabled=is_page_action_busy(PAGE_KEY),
+            on_click=queue_page_action,
+            args=(
+                PAGE_KEY,
+                "admin_save_volunteer",
+                {
+                    "name": name,
+                    "email": email,
+                    "phone": phone,
+                    "active": bool(active),
+                    "thu_ok": bool(thu_ok),
+                    "sun_ok": bool(sun_ok),
+                    "can_obs": bool(can_obs),
+                    "can_fixed": bool(can_fixed),
+                    "can_mobile": bool(can_mobile),
+                },
+            ),
+        )
     with b2:
-        cleared = st.form_submit_button("🧹 Limpar" if lang == "pt" else "🧹 Clear", use_container_width=True)
+        cleared = st.form_submit_button(
+            "🧹 Limpar" if lang == "pt" else "🧹 Clear",
+            use_container_width=True,
+            disabled=is_page_action_busy(PAGE_KEY),
+        )
 
 if cleared:
     toast_info("Formulário limpo." if lang == "pt" else "Form cleared.")
     bump("adm_form_ver")
     st.rerun()
 
-if submit:
-    toast_info("Salvando..." if lang == "pt" else "Saving...")
-    if not name:
-        toast_err(t("common.name_required"))
-        st.error(t("common.name_required"))
-    elif email and not is_valid_email(email):
-        toast_err(t("common.invalid_email"))
-        st.error(t("common.invalid_email"))
-    else:
-        # Detect pending -> active transition BEFORE upsert
-        prev = find_existing_volunteer(email=email or None, name=name or None)
-        prev_active = int(prev["active"]) if prev else None
+admin_save_action = consume_page_action(PAGE_KEY, "admin_save_volunteer")
+if admin_save_action is not None:
+    try:
+        toast_info("Salvando..." if lang == "pt" else "Saving...")
+        action_name = str(admin_save_action.get("name", "")).strip()
+        action_email = str(admin_save_action.get("email", "")).strip()
+        action_phone = str(admin_save_action.get("phone", "")).strip()
+        if not action_name:
+            toast_err(t("common.name_required"))
+            st.error(t("common.name_required"))
+        elif action_email and not is_valid_email(action_email):
+            toast_err(t("common.invalid_email"))
+            st.error(t("common.invalid_email"))
+        else:
+            prev = find_existing_volunteer(email=action_email or None, name=action_name or None)
+            prev_active = int(prev["active"]) if prev else None
+            new_active = 1 if admin_save_action.get("active") else 0
 
-        new_active = 1 if active else 0
+            with st.spinner("Salvando..." if lang == "pt" else "Saving..."):
+                upsert_volunteer({
+                    "name": action_name,
+                    "email": action_email or None,
+                    "phone": normalize_phone(action_phone) if action_phone else None,
+                    "active": new_active,
+                    "thu_ok": 1 if admin_save_action.get("thu_ok") else 0,
+                    "sun_ok": 1 if admin_save_action.get("sun_ok") else 0,
+                    "can_obs": 1 if admin_save_action.get("can_obs") else 0,
+                    "can_fixed": 1 if admin_save_action.get("can_fixed") else 0,
+                    "can_mobile": 1 if admin_save_action.get("can_mobile") else 0,
+                })
 
-        upsert_volunteer({
-            "name": name,
-            "email": email or None,
-            "phone": normalize_phone(phone) if phone else None,
-            "active": new_active,
-            "thu_ok": 1 if thu_ok else 0,
-            "sun_ok": 1 if sun_ok else 0,
-            "can_obs": 1 if can_obs else 0,
-            "can_fixed": 1 if can_fixed else 0,
-            "can_mobile": 1 if can_mobile else 0,
-        })
+            toast_ok("Salvo." if lang == "pt" else "Saved.")
 
-        toast_ok("Salvo." if lang == "pt" else "Saved.")
-
-        # If admin just approved (0 -> 1), send approval email
-        if prev_active == 0 and new_active == 1:
-            if is_valid_email(email):
-                toast_info("Aprovado ✅ enviando e-mail..." if lang == "pt" else "Approved ✅ sending email...")
-                ok, msg = send_approved_email(email, name)
-                if ok:
-                    toast_ok("E-mail de aprovação enviado." if lang == "pt" else "Approval email sent.")
-                    st.info(
-                        (f"E-mail de aprovação enviado para {email}." if lang == "pt" else f"Approval email sent to {email}.")
-                    )
+            if prev_active == 0 and new_active == 1:
+                if is_valid_email(action_email):
+                    toast_info("Aprovado ✅ enviando e-mail..." if lang == "pt" else "Approved ✅ sending email...")
+                    ok, msg = send_approved_email(action_email, action_name)
+                    if ok:
+                        toast_ok("E-mail de aprovação enviado." if lang == "pt" else "Approval email sent.")
+                        st.info(
+                            (f"E-mail de aprovação enviado para {action_email}." if lang == "pt" else f"Approval email sent to {action_email}.")
+                        )
+                    else:
+                        toast_err(("Falha ao enviar e-mail: " if lang == "pt" else "Failed to send email: ") + msg)
+                        st.error(
+                            ("Falha ao enviar e-mail de aprovação: " if lang == "pt" else "Failed to send approval email: ")
+                            + msg
+                        )
                 else:
-                    toast_err(("Falha ao enviar e-mail: " if lang == "pt" else "Failed to send email: ") + msg)
-                    st.error(
-                        ("Falha ao enviar e-mail de aprovação: " if lang == "pt" else "Failed to send approval email: ")
-                        + msg
+                    toast_warn(
+                        "Aprovado, mas sem e-mail válido para notificar."
+                        if lang == "pt" else
+                        "Approved, but no valid email to notify."
                     )
-            else:
-                toast_warn(
-                    "Aprovado, mas sem e-mail válido para notificar."
-                    if lang == "pt" else
-                    "Approved, but no valid email to notify."
-                )
-                st.warning(
-                    "Aprovado, mas o voluntário não possui e-mail válido para receber notificação."
-                    if lang == "pt" else
-                    "Approved, but the volunteer has no valid email to notify."
-                )
+                    st.warning(
+                        "Aprovado, mas o voluntário não possui e-mail válido para receber notificação."
+                        if lang == "pt" else
+                        "Approved, but the volunteer has no valid email to notify."
+                    )
 
-        st.success(t("common.refresh"))
-        bump("adm_form_ver")
-        st.rerun()
+            st.success(t("common.refresh"))
+            bump("adm_form_ver")
+            st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
 # -------- Quick toggle (Admin) --------
 st.subheader(t("vol.quick_toggle"))
 id_to_toggle = st.number_input(t("vol.volunteer_id"), min_value=1, step=1)
 toggle_active = st.selectbox(t("vol.set_active_to"), [True, False])
 
-if st.button("Apply / Aplicar"):
-    vid = int(id_to_toggle)
-    toast_info(("Aplicando..." if lang == "pt" else "Applying...") + f" (ID {vid})")
+st.button(
+    "Apply / Aplicar",
+    disabled=is_page_action_busy(PAGE_KEY),
+    on_click=queue_page_action,
+    args=(PAGE_KEY, "quick_toggle_volunteer", {"volunteer_id": int(id_to_toggle), "toggle_active": bool(toggle_active)}),
+)
 
-    before = get_volunteer_by_id(vid)
-    if not before:
-        toast_err("ID não encontrado." if lang == "pt" else "ID not found.")
-        st.error("ID não encontrado." if lang == "pt" else "ID not found.")
-        st.stop()
+quick_toggle_action = consume_page_action(PAGE_KEY, "quick_toggle_volunteer")
+if quick_toggle_action is not None:
+    try:
+        vid = int(quick_toggle_action["volunteer_id"])
+        new_active_state = bool(quick_toggle_action["toggle_active"])
+        toast_info(("Aplicando..." if lang == "pt" else "Applying...") + f" (ID {vid})")
 
-    before_active = int(before["active"])
-    before_email = (before.get("email") or "").strip()
-    before_name = (before.get("name") or f"#{vid}").strip()
-
-    set_volunteer_active(vid, bool(toggle_active))
-
-    after = get_volunteer_by_id(vid)
-    after_email = (after.get("email") or before_email).strip() if after else before_email
-    after_name = (after.get("name") or before_name).strip() if after else before_name
-
-    if (before_active == 0) and bool(toggle_active):
-        toast_info("Ativado ✅ enviando e-mail..." if lang == "pt" else "Activated ✅ sending email...")
-        if not is_valid_email(after_email):
-            toast_warn(
-                "Ativado, mas sem e-mail válido para notificar."
-                if lang == "pt" else
-                "Activated, but no valid email to notify."
-            )
-            st.warning(
-                "Ativado, mas o voluntário não possui e-mail válido para receber notificação."
-                if lang == "pt" else
-                "Activated, but the volunteer has no valid email to notify."
-            )
+        before = get_volunteer_by_id(vid)
+        if not before:
+            toast_err("ID não encontrado." if lang == "pt" else "ID not found.")
+            st.error("ID não encontrado." if lang == "pt" else "ID not found.")
         else:
-            ok, msg = send_approved_email(after_email, after_name)
-            if ok:
-                toast_ok(
-                    f"E-mail de aprovação enviado: {after_email}"
-                    if lang == "pt" else
-                    f"Approval email sent: {after_email}"
-                )
-                st.info(
-                    f"E-mail de aprovação enviado para {after_email}."
-                    if lang == "pt" else
-                    f"Approval email sent to {after_email}."
-                )
-            else:
-                toast_err(("Falha ao enviar e-mail: " if lang == "pt" else "Failed to send email: ") + msg)
-                st.error(
-                    ("Falha ao enviar e-mail de aprovação: " if lang == "pt" else "Failed to send approval email: ")
-                    + msg
-                )
+            before_active = int(before["active"])
+            before_email = (before.get("email") or "").strip()
+            before_name = (before.get("name") or f"#{vid}").strip()
 
-    if (before_active == 1) and (not bool(toggle_active)):
-        toast_ok("Desativado." if lang == "pt" else "Deactivated.")
+            with st.spinner("Aplicando..." if lang == "pt" else "Applying..."):
+                set_volunteer_active(vid, new_active_state)
 
-    toast_ok(t("common.refresh"))
-    st.rerun()
+            after = get_volunteer_by_id(vid)
+            after_email = (after.get("email") or before_email).strip() if after else before_email
+            after_name = (after.get("name") or before_name).strip() if after else before_name
+
+            if (before_active == 0) and new_active_state:
+                toast_info("Ativado ✅ enviando e-mail..." if lang == "pt" else "Activated ✅ sending email...")
+                if not is_valid_email(after_email):
+                    toast_warn(
+                        "Ativado, mas sem e-mail válido para notificar."
+                        if lang == "pt" else
+                        "Activated, but no valid email to notify."
+                    )
+                    st.warning(
+                        "Ativado, mas o voluntário não possui e-mail válido para receber notificação."
+                        if lang == "pt" else
+                        "Activated, but the volunteer has no valid email to notify."
+                    )
+                else:
+                    ok, msg = send_approved_email(after_email, after_name)
+                    if ok:
+                        toast_ok(
+                            f"E-mail de aprovação enviado: {after_email}"
+                            if lang == "pt" else
+                            f"Approval email sent: {after_email}"
+                        )
+                        st.info(
+                            f"E-mail de aprovação enviado para {after_email}."
+                            if lang == "pt" else
+                            f"Approval email sent to {after_email}."
+                        )
+                    else:
+                        toast_err(("Falha ao enviar e-mail: " if lang == "pt" else "Failed to send email: ") + msg)
+                        st.error(
+                            ("Falha ao enviar e-mail de aprovação: " if lang == "pt" else "Failed to send approval email: ")
+                            + msg
+                        )
+
+            if (before_active == 1) and (not new_active_state):
+                toast_ok("Desativado." if lang == "pt" else "Deactivated.")
+
+            toast_ok(t("common.refresh"))
+            st.rerun()
+    finally:
+        clear_page_action(PAGE_KEY)
 
 st.caption(t("vol.note.upsert_key"))

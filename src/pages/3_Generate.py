@@ -13,10 +13,14 @@ from src.db import (
     rebuild_reminders_for_month,
 )
 from src.scheduler import month_services, generate_assignments
+from src.services.evolution_api_service import get_whatsapp_test_override_number
+from src.services.monthly_schedule_service import send_month_schedule_alerts
+from src.services.ui_action_service import clear_page_action, consume_page_action, is_page_action_busy, queue_page_action
 from src.i18n import t, get_lang
 
 
 lang = get_lang()
+PAGE_KEY = "generate_page"
 
 
 def _label(pt: str, en: str) -> str:
@@ -54,7 +58,11 @@ with seed_bar1:
         )
     )
 with seed_bar2:
-    if st.button("🎲 " + _label("Novo seed", "New seed"), key="gen_new_seed_btn"):
+    if st.button(
+        "🎲 " + _label("Novo seed", "New seed"),
+        key="gen_new_seed_btn",
+        disabled=is_page_action_busy(PAGE_KEY),
+    ):
         st.session_state["gen_seed"] = random.randint(1, 1_000_000_000)
         st.toast(_label("Seed atualizado.", "Seed updated."), icon="🎲")
         st.rerun()
@@ -136,131 +144,198 @@ st.info(
     )
 )
 
-if st.button(
-    t("gen.generate_overwrite") if t("gen.generate_overwrite") != "gen.generate_overwrite" else _label("Gerar (substitui o mês inteiro)", "Generate (overwrites month)"),
-    type="primary",
-    key="gen_go",
-):
-    st.toast(_label("Gerando escala...", "Generating schedule..."), icon="⚙️")
-
-    run_seed = int(seed)
-    if use_auto_random:
-        run_seed = random.randint(1, 1_000_000_000)
-        st.session_state["gen_seed"] = run_seed
-
-    clear_month_services(int(year), int(month))
-
-    # Load volunteers (FIX: now includes email column)
-    vols = []
-    for (vid, name, phone, email, active, thu_ok, sun_ok, can_obs, can_fixed, can_mobile) in list_volunteers(active_only=False):
-        vols.append(
-            {
-                "id": int(vid),
-                "name": name,
-                "email": email,
-                "active": bool(active),
-                "thu_ok": bool(thu_ok),
-                "sun_ok": bool(sun_ok),
-                "can_obs": bool(can_obs),
-                "can_fixed": bool(can_fixed),
-                "can_mobile": bool(can_mobile),
-            }
+test_override = get_whatsapp_test_override_number()
+if test_override:
+    st.info(
+        _label(
+            f"Modo teste ativo: os envios de WhatsApp serao redirecionados para {test_override}.",
+            f"Test mode is active: WhatsApp sends will be rerouted to {test_override}.",
         )
-
-    # Shuffle volunteer input order too (seeded)
-    random.Random(run_seed).shuffle(vols)
-
-    # Month services (dt_iso strings)
-    services = month_services(int(year), int(month))
-    if not services:
-        st.warning(_label("Nenhum culto encontrado para esse mês.", "No services found for this month."))
-        st.stop()
-
-    # Generate assignments (base generator may still create 3 roles)
-    assignments = generate_assignments(
-        vols,
-        services,
-        seed=run_seed,
-        prefer_mobile=prefer_mobile,
     )
 
-    # Enforce rule: Sunday 15:00 => OBS only (drop FIXED/MOBILE)
-    for dt_iso in list(assignments.keys()):
-        if is_sunday_1500_obs_only(dt_iso):
-            assignments[dt_iso] = {"OBS": assignments[dt_iso].get("OBS")}
+action_col1, action_col2 = st.columns(2)
+with action_col1:
+    st.button(
+        t("gen.generate_overwrite") if t("gen.generate_overwrite") != "gen.generate_overwrite" else _label("Gerar (substitui o mês inteiro)", "Generate (overwrites month)"),
+        type="primary",
+        key="gen_go",
+        disabled=is_page_action_busy(PAGE_KEY),
+        on_click=queue_page_action,
+        args=(
+            PAGE_KEY,
+            "generate_schedule",
+            {
+                "year": int(year),
+                "month": int(month),
+                "seed": int(seed),
+                "prefer_mobile": bool(prefer_mobile),
+                "use_auto_random": bool(use_auto_random),
+            },
+        ),
+    )
+with action_col2:
+    st.button(
+        _label("Enviar escala do mes por WhatsApp", "Send month schedule by WhatsApp"),
+        key="gen_send_month_schedule",
+        disabled=is_page_action_busy(PAGE_KEY),
+        on_click=queue_page_action,
+        args=(PAGE_KEY, "send_month_alerts", {"year": int(year), "month": int(month)}),
+        help=_label(
+            "Envia uma mensagem por voluntario com todos os cultos dele no mes selecionado.",
+            "Sends one message per volunteer with all of their services in the selected month.",
+        ),
+    )
 
-    # Persist services + assignments (only persist roles present)
-    for dt_iso, roles in assignments.items():
-        sid = ensure_service(dt_iso)
-        for role, vol_id in roles.items():
-            upsert_assignment(sid, role, vol_id)
-
-    rebuild_reminders_for_month(int(year), int(month))
-
-    # Stats (count only required roles per service)
-    id_to_name = {v["id"]: v["name"] for v in vols}
-    active_ids = [v["id"] for v in vols if v["active"]]
-
-    served_count = Counter()
-    role_count = defaultdict(Counter)  # vid -> Counter(role)
-    unfilled_slots = 0
-    total_slots = 0
-
-    for dt_iso, roles in assignments.items():
-        required = required_roles_for_service(dt_iso)
-        total_slots += len(required)
-
-        for role in required:
-            vid = roles.get(role)
-            if vid is None:
-                unfilled_slots += 1
-                continue
-            served_count[vid] += 1
-            role_count[vid][role] += 1
-
-    missing = [vid for vid in active_ids if served_count.get(vid, 0) == 0]
-
-    st.success(_label("Escala gerada e lembretes reconstruídos.", "Generated schedule + rebuilt reminder jobs for the month."))
-    st.toast(_label("Concluído ✅", "Done ✅"), icon="✅")
-    st.caption(_label(f"Seed usado: {run_seed}", f"Seed used: {run_seed}"))
-
-    a1, a2, a3, a4 = st.columns(4)
-    a1.metric(_label("Cultos", "Services"), str(len(assignments)))
-    a2.metric(_label("Slots totais", "Total slots"), str(total_slots))
-    a3.metric(_label("Slots vazios", "Empty slots"), str(unfilled_slots))
-    a4.metric(_label("Voluntários ativos", "Active volunteers"), str(len(active_ids)))
-
-    if ensure_everyone and missing:
-        st.warning(
-            _label(
-                "Alguns voluntários ativos não conseguiram ser escalados (provável conflito de disponibilidade/capacidade):",
-                "Some active volunteers could not be scheduled (likely availability/capability constraints):",
+send_month_alerts_action = consume_page_action(PAGE_KEY, "send_month_alerts")
+if send_month_alerts_action is not None:
+    try:
+        with st.spinner(_label("Enviando escala do mes...", "Sending month schedule...")):
+            result = send_month_schedule_alerts(
+                int(send_month_alerts_action["year"]),
+                int(send_month_alerts_action["month"]),
+                lang=lang,
             )
-        )
-        st.write(", ".join(id_to_name.get(vid, str(vid)) for vid in missing))
-
-    if avoid_role_repeat:
-        repeats = []
-        for vid, c in role_count.items():
-            for role, n in c.items():
-                if n >= 2:
-                    repeats.append((id_to_name.get(vid, str(vid)), role, n))
-        if repeats:
-            st.info(
+        if result["total_recipients"] == 0:
+            st.warning(
                 _label(
-                    "Aviso: houve repetição de papel para alguns voluntários (best-effort).",
-                    "Note: some volunteers repeated roles (best-effort).",
+                    "Nao ha voluntarios escalados nesse mes para enviar.",
+                    "There are no scheduled volunteers in this month to notify.",
                 )
             )
-            st.dataframe(
-                [{"volunteer": v, "role": r, "times": n} for (v, r, n) in repeats],
-                use_container_width=True,
-                hide_index=True,
+        else:
+            st.toast(
+                _label(
+                    f"WhatsApps enviados: {result['sent_messages']} | Sem numero: {result['skipped_no_phone']} | Falhas: {result['failed_messages']}",
+                    f"WhatsApps sent: {result['sent_messages']} | No phone: {result['skipped_no_phone']} | Failures: {result['failed_messages']}",
+                ),
+                icon="📲",
+            )
+    except Exception as exc:
+        st.toast(f"Falha: {exc}" if lang == "pt" else f"Failed: {exc}", icon="❌")
+    finally:
+        clear_page_action(PAGE_KEY)
+
+generate_action = consume_page_action(PAGE_KEY, "generate_schedule")
+if generate_action is not None:
+    try:
+        with st.spinner(_label("Gerando escala...", "Generating schedule...")):
+            run_seed = int(generate_action["seed"])
+            if bool(generate_action["use_auto_random"]):
+                run_seed = random.randint(1, 1_000_000_000)
+                st.session_state["gen_seed"] = run_seed
+
+            clear_month_services(int(generate_action["year"]), int(generate_action["month"]))
+
+            # Load volunteers (FIX: now includes email column)
+            vols = []
+            for (vid, name, email, phone, active, thu_ok, sun_ok, can_obs, can_fixed, can_mobile) in list_volunteers(active_only=False):
+                vols.append(
+                    {
+                        "id": int(vid),
+                        "name": name,
+                        "email": email,
+                        "phone": phone,
+                        "active": bool(active),
+                        "thu_ok": bool(thu_ok),
+                        "sun_ok": bool(sun_ok),
+                        "can_obs": bool(can_obs),
+                        "can_fixed": bool(can_fixed),
+                        "can_mobile": bool(can_mobile),
+                    }
+                )
+
+            # Shuffle volunteer input order too (seeded)
+            random.Random(run_seed).shuffle(vols)
+
+            # Month services (dt_iso strings)
+            services = month_services(int(generate_action["year"]), int(generate_action["month"]))
+            if not services:
+                st.warning(_label("Nenhum culto encontrado para esse mês.", "No services found for this month."))
+                st.stop()
+
+            assignments = generate_assignments(
+                vols,
+                services,
+                seed=run_seed,
+                prefer_mobile=bool(generate_action["prefer_mobile"]),
             )
 
-    st.caption(
-        _label(
-            "Se quiser outra distribuição, clique em 'Novo seed' ou marque 'Sempre embaralhar automaticamente'.",
-            "If you want a different distribution, click 'New seed' or enable 'Always reshuffle automatically'.",
+            for dt_iso in list(assignments.keys()):
+                if is_sunday_1500_obs_only(dt_iso):
+                    assignments[dt_iso] = {"OBS": assignments[dt_iso].get("OBS")}
+
+            for dt_iso, roles in assignments.items():
+                sid = ensure_service(dt_iso)
+                for role, vol_id in roles.items():
+                    upsert_assignment(sid, role, vol_id)
+
+            rebuild_reminders_for_month(int(generate_action["year"]), int(generate_action["month"]))
+
+        id_to_name = {v["id"]: v["name"] for v in vols}
+        active_ids = [v["id"] for v in vols if v["active"]]
+
+        served_count = Counter()
+        role_count = defaultdict(Counter)
+        unfilled_slots = 0
+        total_slots = 0
+
+        for dt_iso, roles in assignments.items():
+            required = required_roles_for_service(dt_iso)
+            total_slots += len(required)
+
+            for role in required:
+                vid = roles.get(role)
+                if vid is None:
+                    unfilled_slots += 1
+                    continue
+                served_count[vid] += 1
+                role_count[vid][role] += 1
+
+        missing = [vid for vid in active_ids if served_count.get(vid, 0) == 0]
+
+        st.success(_label("Escala gerada e lembretes reconstruídos.", "Generated schedule + rebuilt reminder jobs for the month."))
+        st.toast(_label("Concluído ✅", "Done ✅"), icon="✅")
+        st.caption(_label(f"Seed usado: {run_seed}", f"Seed used: {run_seed}"))
+
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric(_label("Cultos", "Services"), str(len(assignments)))
+        a2.metric(_label("Slots totais", "Total slots"), str(total_slots))
+        a3.metric(_label("Slots vazios", "Empty slots"), str(unfilled_slots))
+        a4.metric(_label("Voluntários ativos", "Active volunteers"), str(len(active_ids)))
+
+        if ensure_everyone and missing:
+            st.warning(
+                _label(
+                    "Alguns voluntários ativos não conseguiram ser escalados (provável conflito de disponibilidade/capacidade):",
+                    "Some active volunteers could not be scheduled (likely availability/capability constraints):",
+                )
+            )
+            st.write(", ".join(id_to_name.get(vid, str(vid)) for vid in missing))
+
+        if avoid_role_repeat:
+            repeats = []
+            for vid, c in role_count.items():
+                for role, n in c.items():
+                    if n >= 2:
+                        repeats.append((id_to_name.get(vid, str(vid)), role, n))
+            if repeats:
+                st.info(
+                    _label(
+                        "Aviso: houve repetição de papel para alguns voluntários (best-effort).",
+                        "Note: some volunteers repeated roles (best-effort).",
+                    )
+                )
+                st.dataframe(
+                    [{"volunteer": v, "role": r, "times": n} for (v, r, n) in repeats],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        st.caption(
+            _label(
+                "Se quiser outra distribuição, clique em 'Novo seed' ou marque 'Sempre embaralhar automaticamente'.",
+                "If you want a different distribution, click 'New seed' or enable 'Always reshuffle automatically'.",
+            )
         )
-    )
+    finally:
+        clear_page_action(PAGE_KEY)

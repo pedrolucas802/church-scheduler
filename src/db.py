@@ -580,12 +580,12 @@ def mark_reminder_sent(reminder_id: int):
         )
 
 
-def list_due_reminders_for_email(now: datetime | None = None):
+def list_due_reminders_for_whatsapp(now: datetime | None = None):
     """
     Returns:
-      (reminder_id, send_at_iso, service_dt, role, volunteer_id, name, email)
+      (reminder_id, send_at_iso, service_dt, role, volunteer_id, name, phone)
     """
-    now = now or datetime.utcnow()
+    now = now or datetime.now()
     now_iso = now.isoformat()
 
     stmt = (
@@ -596,7 +596,7 @@ def list_due_reminders_for_email(now: datetime | None = None):
             assignments.c.role,
             volunteers.c.id.label("volunteer_id"),
             volunteers.c.name,
-            volunteers.c.email,
+            volunteers.c.phone,
         )
         .select_from(
             reminder_jobs

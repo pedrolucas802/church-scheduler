@@ -1,11 +1,18 @@
-from datetime import datetime
-from src.pages_helpers.reminders_sender import send_due_emails_deduped
+from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.reminders.runner import now_in_fortaleza_naive, send_due_whatsapp_reminders
 
 if __name__ == "__main__":
-    # Use UTC to match your DB timestamps if you store ISO in UTC
-    now = datetime.utcnow()
-    result = send_due_emails_deduped(now=now)
+    now = now_in_fortaleza_naive()
+    result = send_due_whatsapp_reminders(now=now, lang="pt")
     print(
-        f"[{now.isoformat()}] sent_emails={result['sent_emails']} "
-        f"marked_sent={result['marked_sent']} skipped_no_email={result['skipped_no_email']}"
+        f"[{now.isoformat()}] sent_whatsapp={result['sent_messages']} "
+        f"marked_sent={result['marked_sent']} "
+        f"skipped_no_phone={result['skipped_no_phone']} "
+        f"failed_messages={result['failed_messages']}"
     )

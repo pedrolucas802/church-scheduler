@@ -1,0 +1,16 @@
+services:
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: evolution_api_local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - evolution_store:/evolution/store
+      - evolution_instances:/evolution/instances
+
+volumes:
+  evolution_store:
+  evolution_instances:
