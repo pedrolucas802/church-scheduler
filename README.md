@@ -5,6 +5,8 @@ A bilingual (**Português / English**) scheduling system for church streaming mi
 
 Designed to start as a **local MVP** and evolve into a **VPS-hosted production system**.
 
+![Church Streaming Scheduler architecture](docs/assets/architecture.svg)
+
 ## ✨ Features
 ### Current MVP
 - 👥 Volunteer management

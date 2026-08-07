@@ -1,0 +1,115 @@
+<svg viewBox="0 0 960 480" xmlns="http://www.w3.org/2000/svg" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="cs-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#141821"/>
+      <stop offset="100%" stop-color="#0c0e13"/>
+    </linearGradient>
+    <linearGradient id="cs-box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c2433"/>
+      <stop offset="100%" stop-color="#151b27"/>
+    </linearGradient>
+    <marker id="cs-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b8fc9"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="480" fill="url(#cs-bg)"/>
+
+  <text x="480" y="36" text-anchor="middle" fill="#f2f4f8" font-size="25" font-weight="700">Church Streaming Scheduler</text>
+  <text x="480" y="57" text-anchor="middle" fill="#7f97b8" font-size="12.5" letter-spacing="1.6">VOLUNTEER ROTATION &#183; STREAMLIT &#183; POSTGRESQL</text>
+
+  <!-- ===== Row 1: roster ===== -->
+  <rect x="330" y="76" width="300" height="54" rx="8" fill="url(#cs-box)" stroke="#2B6CB0" stroke-width="1.5"/>
+  <g transform="translate(360,103)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#2B6CB0"/>
+    <circle cy="-4.2" r="3.4" fill="#fff"/>
+    <path d="M-6.6,6.6 C-6.6,0.8 6.6,0.8 6.6,6.6 Z" fill="#fff"/>
+  </g>
+  <text x="386" y="100" fill="#e7edf5" font-size="14" font-weight="600">Volunteer Roster</text>
+  <text x="386" y="117" fill="#8ba3c4" font-size="11">availability &#183; roles &#183; history</text>
+
+  <path d="M480,130 V152" fill="none" stroke="#5b8fc9" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+
+  <!-- ===== Row 2: scheduler engine ===== -->
+  <rect x="290" y="154" width="380" height="56" rx="8" fill="url(#cs-box)" stroke="#1E4E8C" stroke-width="2"/>
+  <g transform="translate(320,182)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#1E4E8C"/>
+    <circle r="6.6" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="29 13" transform="rotate(-35)"/>
+    <path d="M4.2,-8 L9.8,-4.8 L4.2,-1.6 Z" fill="#fff"/>
+  </g>
+  <text x="346" y="179" fill="#f2f4f8" font-size="15" font-weight="700">Fair Rotation Scheduler</text>
+  <text x="346" y="196" fill="#8ba3c4" font-size="11">auto-generates Thursday &amp; Sunday schedules</text>
+
+  <path d="M480,210 V220" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M190,220 H770" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M190,220 V232" fill="none" stroke="#5b8fc9" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+  <path d="M480,220 V232" fill="none" stroke="#5b8fc9" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+  <path d="M770,220 V232" fill="none" stroke="#5b8fc9" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+
+  <!-- ===== Row 3: features ===== -->
+  <rect x="60" y="232" width="260" height="60" rx="8" fill="url(#cs-box)" stroke="#2B6CB0" stroke-width="1.5"/>
+  <g transform="translate(90,262)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#2B6CB0"/>
+    <rect x="-7" y="-5.4" width="14" height="12.4" rx="2" fill="none" stroke="#fff" stroke-width="1.9"/>
+    <path d="M-7,-1.4 H7" stroke="#fff" stroke-width="1.9"/>
+    <path d="M-3.4,-8.4 V-4.2 M3.4,-8.4 V-4.2" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+  </g>
+  <text x="116" y="259" fill="#e7edf5" font-size="13.5" font-weight="600">Calendar View</text>
+  <text x="116" y="276" fill="#8ba3c4" font-size="10.5">monthly overview &amp; edits</text>
+
+  <rect x="350" y="232" width="260" height="60" rx="8" fill="url(#cs-box)" stroke="#2B6CB0" stroke-width="1.5"/>
+  <g transform="translate(380,262)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#2B6CB0"/>
+    <g fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-7,-3.4 H5"/>
+      <path d="M2,-6.6 L5.8,-3.4 L2,-0.2"/>
+      <path d="M7,3.8 H-5"/>
+      <path d="M-2,0.6 L-5.8,3.8 L-2,7"/>
+    </g>
+  </g>
+  <text x="406" y="259" fill="#e7edf5" font-size="13.5" font-weight="600">Swap Requests</text>
+  <text x="406" y="276" fill="#8ba3c4" font-size="10.5">volunteer-initiated swaps</text>
+
+  <rect x="640" y="232" width="260" height="60" rx="8" fill="url(#cs-box)" stroke="#2B6CB0" stroke-width="1.5"/>
+  <g transform="translate(670,262)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#2B6CB0"/>
+    <circle r="7" fill="none" stroke="#fff" stroke-width="1.9"/>
+    <path d="M0,-3.9 V0.6 L3.3,2.7" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="696" y="259" fill="#e7edf5" font-size="13.5" font-weight="600">Reminder Queue</text>
+  <text x="696" y="276" fill="#8ba3c4" font-size="10.5">24h before each service</text>
+
+  <path d="M190,292 V303" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M480,292 V303" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M770,292 V303" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M190,303 H770" fill="none" stroke="#5b8fc9" stroke-width="1.5"/>
+  <path d="M480,303 V314" fill="none" stroke="#5b8fc9" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+
+  <!-- ===== Row 4: UI + storage ===== -->
+  <rect x="290" y="314" width="380" height="58" rx="8" fill="#2B6CB0" fill-opacity="0.18" stroke="#2B6CB0" stroke-width="2"/>
+  <g transform="translate(320,343)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#FF4B4B"/>
+    <text y="6" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">S</text>
+  </g>
+  <g transform="translate(354,343)">
+    <rect x="-14" y="-14" width="28" height="28" rx="7" fill="#336791"/>
+    <text y="4.5" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">PG</text>
+  </g>
+  <text x="380" y="340" fill="#f2f4f8" font-size="15" font-weight="700">Streamlit UI &#183; PostgreSQL</text>
+  <text x="380" y="357" fill="#9db6d6" font-size="11">bilingual Portugu&#234;s / English</text>
+
+  <!-- ===== Stack badges ===== -->
+  <g font-size="11" fill="#9db6d6">
+    <rect x="290" y="404" width="132" height="30" rx="15" fill="#151b27" stroke="#2B6CB0" stroke-width="1"/>
+    <circle cx="308" cy="419" r="4.5" fill="#2496ED"/>
+    <text x="320" y="423">Docker Compose</text>
+
+    <rect x="434" y="404" width="112" height="30" rx="15" fill="#151b27" stroke="#2B6CB0" stroke-width="1"/>
+    <circle cx="452" cy="419" r="4.5" fill="#D71F00"/>
+    <text x="464" y="423">SQLAlchemy</text>
+
+    <rect x="558" y="404" width="112" height="30" rx="15" fill="#151b27" stroke="#2B6CB0" stroke-width="1"/>
+    <circle cx="576" cy="419" r="4.5" fill="#3776AB"/>
+    <text x="588" y="423">Python 3.11+</text>
+  </g>
+</svg>
