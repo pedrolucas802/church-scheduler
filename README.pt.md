@@ -4,6 +4,8 @@ Sistema bilíngue (**Português / English**) para gerenciamento de escalas do mi
 
 O projeto foi pensado para começar como um **MVP local** e evoluir naturalmente para um **ambiente em produção em VPS**.
 
+![Arquitetura da Escala do Ministério de Transmissão](docs/assets/architecture.svg)
+
 ## ✨ Funcionalidades
 ### MVP (atual)
 - 👥 Cadastro e gestão de voluntários
